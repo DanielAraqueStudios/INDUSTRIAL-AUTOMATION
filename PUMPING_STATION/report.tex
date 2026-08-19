@@ -1,5 +1,14 @@
 \documentclass[conference]{IEEEtran}
 \usepackage[spanish]{babel}
+% babel-spanish activa "<" y ">" como caracteres especiales (shorthand para
+% comillas angulares << >>). Eso rompe cualquier uso de < o > como simbolo
+% matematico (p. ej. "$Q<150$"), incluso protegido entre llaves. babel solo
+% activa los shorthands del idioma principal al llegar a \begin{document}
+% (no al cargar el paquete), asi que \shorthandoff debe diferirse con
+% \AtBeginDocument; llamarlo aqui directamente no tiene efecto porque babel
+% los reactiva despues. El resto de shorthands de spanish (p. ej. ~ para
+% espacio irrompible) siguen activos.
+\AtBeginDocument{\shorthandoff{<>}}
 \usepackage{graphicx}
 \usepackage{amsmath}
 \usepackage{siunitx}
@@ -297,7 +306,7 @@ DB3 (DB\_Alarmas) & Registro de eventos de falla y emergencia (histórico) \\ \h
 \end{tabular}
 \end{table}
 
-\imgslot{01_project_tree.png}{3.2cm}{Árbol del proyecto en TIA Portal: bloques OB/FB/FC/DB de la estación de bombeo.}{fig:project_tree}
+\imgslot{01-project-tree.png}{3.2cm}{Árbol del proyecto en TIA Portal: bloques OB/FB/FC/DB de la estación de bombeo.}{fig:project-tree}
 
 \subsection{Lógica de enclavamientos y modos (LAD)}
 
@@ -324,7 +333,7 @@ Network 3: Enclavamiento de falla general (SR)
 ----| |------------| |---------------------------(R)-----
 \end{lstlisting}
 
-\imgslot{02_lad_networks_1_3.png}{3.2cm}{Vista del editor LAD en TIA Portal: Networks 1--3 (enclavamiento general y permisivos de seguridad).}{fig:lad_1_3}
+\imgslot{02-lad-networks-1-3.png}{3.2cm}{Vista del editor LAD en TIA Portal: Networks 1--3 (enclavamiento general y permisivos de seguridad).}{fig:lad-1-3}
 
 \begin{lstlisting}[caption={Network 4: Selector de modo y comando individual de bomba (ejemplo B1)}, label={lst:lad3}]
 Network 4: Comando de salida Q_B1 (combina Auto/Manual)
@@ -337,7 +346,7 @@ Network 4: Comando de salida Q_B1 (combina Auto/Manual)
 (misma bobina Q_B1, rama OR con la anterior) -------------
 \end{lstlisting}
 
-\imgslot{03_lad_network_4.png}{3.2cm}{Vista del editor LAD en TIA Portal: Network 4 replicada para B1--B4 (comando de salida por bomba).}{fig:lad_4}
+\imgslot{03-lad-network-4.png}{3.2cm}{Vista del editor LAD en TIA Portal: Network 4 replicada para B1--B4 (comando de salida por bomba).}{fig:lad-4}
 
 Las redes anteriores se replican para B2, B3 y B4 cambiando únicamente el operando de bomba. \texttt{SFC\_CMD\_Bx} corresponde al bit de comando que la secuencia SFC (Sección~\ref{sec:sfc}) activa para la bomba seleccionada por el algoritmo de rotación.
 
@@ -417,7 +426,7 @@ S4 & 4 & ${>}150$~\si{m^3/h} \\ \hline
 \label{fig:sfc}
 \end{figure}
 
-\imgslot{04_graph_sequence.png}{3.2cm}{Vista del editor S7-GRAPH en TIA Portal: secuencia de escalonamiento S0--S4 como construida.}{fig:graph_asbuilt}
+\imgslot{04-graph-sequence.png}{3.2cm}{Vista del editor S7-GRAPH en TIA Portal: secuencia de escalonamiento S0--S4 como construida.}{fig:graph-asbuilt}
 
 Cada paso $S_n$ ($n\geq1$) activa, como acción asociada, exactamente $n$ bits \texttt{SFC\_CMD\_Bx}, seleccionados por el algoritmo de rotación descrito a continuación, y no directamente por número físico de bomba.
 
@@ -448,7 +457,7 @@ Al entrar al paso $S_n$, se activan las primeras $n$ bombas de \texttt{orden} qu
 \end{tabular}
 \end{table}
 
-\imgslot{05_watch_rotacion.png}{3.2cm}{Tabla de observación (watch table) en línea: \texttt{idx\_lider} y vector \texttt{orden[]} del DB2 durante la operación.}{fig:watch_rotacion}
+\imgslot{05-watch-rotacion.png}{3.2cm}{Tabla de observación (watch table) en línea: \texttt{idx\_lider} y vector \texttt{orden[]} del DB2 durante la operación.}{fig:watch-rotacion}
 
 \subsection{Gestión de fallas}
 
@@ -481,13 +490,13 @@ Parada de emergencia & \texttt{I\_ESTOP} activada & Corte inmediato de todos los
 \end{tabular}
 \end{table*}
 
-\imgslot{06_plcsim_trend.png}{3.2cm}{Tendencia PLCSIM: caudal $Q_{FT01}$, pasos S0--S4 y estados de bomba durante los escenarios de la Tabla~\ref{tab:validacion}.}{fig:plcsim_trend}
+\imgslot{06-plcsim-trend.png}{3.2cm}{Tendencia PLCSIM: caudal $Q_{FT01}$, pasos S0--S4 y estados de bomba durante los escenarios de la Tabla~\ref{tab:validacion}.}{fig:plcsim-trend}
 
 \section{Interfaz Hombre-Máquina (HMI)}
 
 Se contempla una pantalla de visualización con: estado individual de cada bomba (Marcha/Paro/Falla/No disponible), caudal instantáneo $Q_{FT01}$ y su tendencia, número de bombas activas y paso actual del SFC, bomba líder vigente del ciclo de rotación, estado de nivel del tanque, y botones soft de Start/Stop/Reset y selección Manual/Automático. La Figura~\ref{fig:hmi} referencia el espacio destinado a la captura de pantalla real de la pantalla de proceso, una vez desarrollada en TIA Portal/WinCC.
 
-\imgslot{07_hmi_runtime.png}{4cm}{Pantalla de proceso HMI: estado de B1--B4, caudal FT-01, paso SFC activo, alarmas y controles Start/Stop/Reset/Manual-Auto.}{fig:hmi}
+\imgslot{07-hmi-runtime.png}{4cm}{Pantalla de proceso HMI: estado de B1--B4, caudal FT-01, paso SFC activo, alarmas y controles Start/Stop/Reset/Manual-Auto.}{fig:hmi}
 
 \section{Conclusiones}
 

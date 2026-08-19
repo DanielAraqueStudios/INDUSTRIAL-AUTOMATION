@@ -67,11 +67,23 @@ latexmk -pdf report.tex
 ```
 
 > Nota: este reporte no se ha compilado en el entorno de desarrollo actual
-> por no contar con una distribución LaTeX instalada. Se corrigió una
-> colisión de nombre de estilo TikZ (`step`, que choca con la clave nativa
-> `/tikz/step`) que impedía compilar, y se verificó el balance de llaves y
-> de entornos `\begin`/`\end`, pero se recomienda una compilación de
-> control antes de la entrega.
+> por no contar con una distribución LaTeX instalada. Se corrigieron tres
+> errores de compilación detectados vía Overleaf: (1) una colisión de
+> nombre de estilo TikZ (`step`, que choca con la clave nativa
+> `/tikz/step`) en el diagrama SFC; (2) guiones bajos sin escapar en los
+> nombres de archivo/etiquetas de `\imgslot` (§7–§9), que rompían la
+> compilación al ser tipografiados vía `\texttt{}` fuera de modo
+> matemático — por eso los archivos esperados en `images/` usan guiones
+> (`-`), no guiones bajos; y (3) `babel[spanish]` activa `<` y `>` como
+> shorthand para comillas angulares (`<<`/`>>`), lo que rompía cualquier
+> uso de `<`/`>` como símbolo matemático (p. ej. `$Q<150$`) aunque
+> estuviera entre llaves. `\shorthandoff{<>}` no basta si se llama justo
+> tras cargar babel: los shorthands del idioma principal solo se activan
+> en `\begin{document}`, así que babel los reactivaba después de mi
+> primera corrección; quedó envuelto en `\AtBeginDocument{...}` para que
+> se ejecute una vez babel ya activó el idioma. Se verificó el
+> balance de llaves y de entornos `\begin`/`\end`, pero se recomienda una
+> compilación de control antes de la entrega.
 
 ## Figuras: diseño propio vs. evidencia real
 
