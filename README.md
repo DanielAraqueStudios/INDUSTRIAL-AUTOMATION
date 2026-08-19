@@ -21,14 +21,16 @@ Cubre las tres actividades del taller:
 
 ## Estructura del proyecto
 
+`report.tex` es un archivo **único y autocontenido**: todo el contenido
+(incluido el listado del Anexo, antes en un `.txt` externo) está embebido
+en el propio `.tex`. La única carpeta relacionada es `images/`, y es
+**opcional** — el documento compila igual de bien sin ella.
+
 ```
 PUMPING_STATION/
-├── README.md                    Este archivo
-├── report.tex                   Reporte principal (IEEEtran, dos columnas)
-├── simulations/
-│   └── logica_consolidada.txt   Equivalente en texto estructurado de la
-│                                 lógica LAD + SFC, incluido en el Anexo
-│                                 del reporte vía \lstinputlisting
+├── report.tex                   Reporte completo (IEEEtran, dos columnas,
+│                                 autocontenido: no depende de ningún otro
+│                                 archivo .tex/.txt para compilar)
 └── images/
     ├── README.md                 Especificación de las 7 capturas reales
     │                             esperadas (nombre de archivo, contenido,
@@ -36,12 +38,19 @@ PUMPING_STATION/
     └── (se completa con capturas de TIA Portal / WinCC / PLCSIM)
 ```
 
+### Subir a Overleaf
+
+Sube `report.tex` y, si quieres que las figuras reales aparezcan en vez
+de los recuadros de espacio reservado, la carpeta `images/` completa
+(manteniendo el nombre `images/` — es el que usa `\imgslot` internamente).
+No hay ningún otro archivo que subir.
+
 ## Requisitos
 
-- Distribución LaTeX con soporte para PDF: TeX Live o MiKTeX.
+- Distribución LaTeX con soporte para PDF: TeX Live o MiKTeX (u Overleaf).
 - Clase `IEEEtran` y paquetes `tikz`, `booktabs`, `siunitx`, `listings`,
   `etoolbox`, `babel[spanish]` — todos incluidos en una instalación
-  estándar `texlive-full` / MiKTeX con instalación automática de paquetes.
+  estándar `texlive-full` / MiKTeX, o disponibles automáticamente en Overleaf.
 
 ## Compilación
 
@@ -58,9 +67,11 @@ latexmk -pdf report.tex
 ```
 
 > Nota: este reporte no se ha compilado en el entorno de desarrollo actual
-> por no contar con una distribución LaTeX instalada. Se verificó el
-> balance de llaves y de entornos `\begin`/`\end`, pero se recomienda una
-> compilación de control antes de la entrega.
+> por no contar con una distribución LaTeX instalada. Se corrigió una
+> colisión de nombre de estilo TikZ (`step`, que choca con la clave nativa
+> `/tikz/step`) que impedía compilar, y se verificó el balance de llaves y
+> de entornos `\begin`/`\end`, pero se recomienda una compilación de
+> control antes de la entrega.
 
 ## Figuras: diseño propio vs. evidencia real
 

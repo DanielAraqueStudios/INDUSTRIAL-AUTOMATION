@@ -365,47 +365,52 @@ S4 & 4 & $>150$~\si{m^3/h} \\ \hline
 
 \begin{figure}[H]
 \centering
+\resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[
     font=\scriptsize,
-    step/.style={draw, thick, minimum width=2.2cm, minimum height=0.55cm},
-    initstep/.style={step, double, double distance=1.5pt},
-    trans/.style={draw, thick, minimum width=0.6cm},
-    yscale=0.85
+    sfcstep/.style={draw, thick, minimum width=2.6cm, minimum height=0.6cm},
+    initstep/.style={sfcstep, double, double distance=1.5pt},
+    trans/.style={draw, thick, minimum width=0.5cm, minimum height=1pt, inner sep=0pt}
 ]
-\node[initstep] (s0) at (0,5) {S0: 0 bombas};
-\node[trans] (t01) at (0,4.55) {};
-\node[step] (s1) at (0,4) {S1: B\_líder ON};
-\node[trans] (t12) at (0,3.55) {};
-\node[step] (s2) at (0,3) {S2: 2 bombas ON};
-\node[trans] (t23) at (0,2.55) {};
-\node[step] (s3) at (0,2) {S3: 3 bombas ON};
-\node[trans] (t34) at (0,1.55) {};
-\node[step] (s4) at (0,1) {S4: 4 bombas ON};
+% Espaciado vertical uniforme entre centros de paso: 1.8 cm
+\node[initstep] (s0) at (0,7.2)  {S0: 0 bombas};
+\node[trans]    (t01) at (0,6.3) {};
+\node[sfcstep]  (s1) at (0,5.4)  {S1: B\_líder ON};
+\node[trans]    (t12) at (0,4.5) {};
+\node[sfcstep]  (s2) at (0,3.6)  {S2: 2 bombas ON};
+\node[trans]    (t23) at (0,2.7) {};
+\node[sfcstep]  (s3) at (0,1.8)  {S3: 3 bombas ON};
+\node[trans]    (t34) at (0,0.9) {};
+\node[sfcstep]  (s4) at (0,0)    {S4: 4 bombas ON};
 
-\draw[thick] (s0) -- (t01);
-\draw[thick] (t01) -- (s1);
-\draw[thick] (s1) -- (t12);
-\draw[thick] (t12) -- (s2);
-\draw[thick] (s2) -- (t23);
-\draw[thick] (t23) -- (s3);
-\draw[thick] (s3) -- (t34);
-\draw[thick] (t34) -- (s4);
+% Cadena de avance (linea vertical, recortada automaticamente en el borde de cada nodo)
+\draw[thick] (s0) -- (t01) -- (s1) -- (t12) -- (s2) -- (t23) -- (s3) -- (t34) -- (s4);
 
-\node[right] at ($(t01.east)+(0.15,0)$) {\scriptsize M\_LISTO $\wedge$ I\_START};
-\node[right] at ($(t12.east)+(0.15,0)$) {\scriptsize $Q{>}50$ TON 10s};
-\node[right] at ($(t23.east)+(0.15,0)$) {\scriptsize $Q{>}100$ TON 10s};
-\node[right] at ($(t34.east)+(0.15,0)$) {\scriptsize $Q{>}150$ TON 10s};
+% Condiciones de avance (a la derecha de cada transicion)
+\node[right] at ($(t01.east)+(0.2,0)$) {M\_LISTO $\wedge$ I\_START};
+\node[right] at ($(t12.east)+(0.2,0)$) {$Q>50$, TON 10~s};
+\node[right] at ($(t23.east)+(0.2,0)$) {$Q>100$, TON 10~s};
+\node[right] at ($(t34.east)+(0.2,0)$) {$Q>150$, TON 10~s};
 
-% Retorno (retroceso) - lineas punteadas a la izquierda
-\draw[thick,dashed,-{Stealth[length=2mm]}] (s4.west) -- ++(-1.3,0) -- ($(t34.west)+(-1.3,0)$) -- (t34.west);
-\node[left, align=right] at (-1.35,1.3) {\scriptsize $Q{<}150$\\TON 30s};
-\draw[thick,dashed,-{Stealth[length=2mm]}] (s3.west) -- ++(-1.3,0) -- ($(t23.west)+(-1.3,0)$) -- (t23.west);
-\node[left, align=right] at (-1.35,2.3) {\scriptsize $Q{<}100$\\TON 30s};
-\draw[thick,dashed,-{Stealth[length=2mm]}] (s2.west) -- ++(-1.3,0) -- ($(t12.west)+(-1.3,0)$) -- (t12.west);
-\node[left, align=right] at (-1.35,3.3) {\scriptsize $Q{<}50$\\TON 30s};
-\draw[thick,dashed,-{Stealth[length=2mm]}] (s1.west) -- ++(-1.3,0) -- ($(t01.west)+(-1.3,0)$) -- (t01.west);
-\node[left, align=right] at (-1.35,4.3) {\scriptsize I\_STOP $\vee$\\ M\_FALLA\_GRAL};
-\end{tikzpicture}
+% Retroceso: linea vertical punteada a la izquierda, unida a cada transicion
+\coordinate (retX) at (-2.6,0);
+\draw[thick,dashed,-{Stealth[length=2mm]}]
+  (s4.west) -| (retX -| s4.west) -- (retX |- t34) -- (t34.west);
+\draw[thick,dashed,-{Stealth[length=2mm]}]
+  (s3.west) -| (retX -| s3.west) -- (retX |- t23) -- (t23.west);
+\draw[thick,dashed,-{Stealth[length=2mm]}]
+  (s2.west) -| (retX -| s2.west) -- (retX |- t12) -- (t12.west);
+\draw[thick,dashed,-{Stealth[length=2mm]}]
+  (s1.west) -| (retX -| s1.west) -- (retX |- t01) -- (t01.west);
+
+% Condiciones de retroceso (a la izquierda de cada linea punteada, alineadas
+% verticalmente con su transicion correspondiente)
+\node[align=right, anchor=east] at ($(retX)+(-0.2,0)|-(t34)$) {$Q<150$\\TON 30~s};
+\node[align=right, anchor=east] at ($(retX)+(-0.2,0)|-(t23)$) {$Q<100$\\TON 30~s};
+\node[align=right, anchor=east] at ($(retX)+(-0.2,0)|-(t12)$) {$Q<50$\\TON 30~s};
+\node[align=right, anchor=east] at ($(retX)+(-0.2,0)|-(t01)$) {I\_STOP $\vee$\\M\_FALLA\_GRAL};
+\end{tikzpicture}%
+}
 \caption{SFC de escalonamiento: pasos S0--S4 (número de bombas activas) con transiciones de avance temporizadas a 10~s y de retroceso a 30~s.}
 \label{fig:sfc}
 \end{figure}
@@ -510,6 +515,134 @@ International Society of Automation, \textit{ANSI/ISA-5.1-2009: Instrumentation 
 
 El listado siguiente resume, en notación estructurada equivalente (no gráfica), la lógica completa desarrollada en LAD y SFC de las Secciones~\ref{sec:plc}, para referencia y trazabilidad de todas las variables internas empleadas. Se documenta como texto porque LAD y SFC son lenguajes gráficos y su código fuente nativo (\texttt{.awl}/\texttt{.graph}) no es representable como texto plano; el archivo de proyecto TIA Portal completo se referencia como entregable adicional del taller. Las capturas reales del entorno (editor LAD, S7-GRAPH, tabla de observación, tendencias PLCSIM y pantalla HMI) se insertan automáticamente en las Secciones~\ref{sec:plc}--\ref{sec:validacion} en cuanto se coloquen en la carpeta \texttt{images/} con el nombre indicado en cada figura; mientras tanto se muestra un recuadro de espacio reservado.
 
-\lstinputlisting[caption={Equivalente estructurado consolidado de la lógica LAD + SFC}, label={lst:consolidado}]{simulations/logica_consolidada.txt}
+\begin{lstlisting}[caption={Equivalente estructurado consolidado de la lógica LAD + SFC}, label={lst:consolidado}]
+// =====================================================================
+// LOGICA CONSOLIDADA - Estacion de Bombeo (4 bombas centrifugas)
+// Representacion estructurada equivalente del programa LAD + SFC/GRAPH
+// Plataforma: Siemens S7-1500 / TIA Portal
+// =====================================================================
+
+// ---------------------------------------------------------------------
+// FC1: FC_EscaladoAnalogico
+// ---------------------------------------------------------------------
+Q_FT01 := (AI_FT01 - 0) / 27648.0 * 200.0;   // Ec. escalado 4-20mA -> 0-200 m3/h
+
+// ---------------------------------------------------------------------
+// FB1 Network 1 (LAD): Sello de marcha del sistema
+// ---------------------------------------------------------------------
+M_SIST_RUN := (I_START OR M_SIST_RUN) AND NOT I_STOP AND I_ESTOP AND M_LISTO;
+
+// ---------------------------------------------------------------------
+// FB1 Network 2 (LAD): Permisivo de arranque
+// ---------------------------------------------------------------------
+M_LISTO := I_MODE_AUTO AND I_LSL_TANQUE AND I_ESTOP AND NOT M_FALLA_GRAL;
+
+// ---------------------------------------------------------------------
+// FB1 Network 3 (LAD): Enclavamiento de falla general (SR)
+// ---------------------------------------------------------------------
+M_FALLA_ANY := I_B1_FALLA OR I_B2_FALLA OR I_B3_FALLA OR I_B4_FALLA;
+IF M_FALLA_ANY THEN
+    M_FALLA_GRAL := TRUE;                 // SET
+END_IF;
+IF I_RESET AND NOT M_FALLA_ANY THEN
+    M_FALLA_GRAL := FALSE;                // RESET
+END_IF;
+Q_ALARMA := M_FALLA_GRAL OR NOT I_LSL_TANQUE OR NOT I_ESTOP;
+
+// ---------------------------------------------------------------------
+// FC2: FC_GestionFallas (por bomba, x = 1..4)
+// ---------------------------------------------------------------------
+FOR x := 1 TO 4 DO
+    IF Bombas[x].Falla THEN
+        Bombas[x].Disponible := FALSE;
+        SFC_CMD[x] := FALSE;              // fuerza parada inmediata de la bomba
+    END_IF;
+    IF I_RESET AND NOT Bombas[x].Falla THEN
+        Bombas[x].Disponible := TRUE;
+    END_IF;
+END_FOR;
+
+// ---------------------------------------------------------------------
+// SFC/GRAPH: Secuencia de escalonamiento (S0..S4)
+// Umbrales: S1[0-50] S2[50-100] S3[100-150] S4[>150] m3/h
+// Temporizadores independientes: T_ARR = TON 10s (avance), T_PAR = TON 30s (retroceso)
+// ---------------------------------------------------------------------
+CASE PasoActual OF
+
+    S0:  // ninguna bomba
+        NumBombasReq := 0;
+        IF M_SIST_RUN AND M_LISTO THEN
+            PasoActual := S1;
+        END_IF;
+
+    S1:  // 1 bomba activa
+        NumBombasReq := 1;
+        T_ARR(IN := (Q_FT01 > 50.0), PT := T#10s);
+        T_PAR(IN := NOT M_SIST_RUN, PT := T#0s);
+        IF T_ARR.Q THEN PasoActual := S2; END_IF;
+        IF NOT M_SIST_RUN OR M_FALLA_GRAL OR NOT M_LISTO THEN PasoActual := S0; END_IF;
+
+    S2:  // 2 bombas activas
+        NumBombasReq := 2;
+        T_ARR(IN := (Q_FT01 > 100.0), PT := T#10s);
+        T_PAR(IN := (Q_FT01 < 50.0), PT := T#30s);
+        IF T_ARR.Q THEN PasoActual := S3; END_IF;
+        IF T_PAR.Q THEN PasoActual := S1; END_IF;
+
+    S3:  // 3 bombas activas
+        NumBombasReq := 3;
+        T_ARR(IN := (Q_FT01 > 150.0), PT := T#10s);
+        T_PAR(IN := (Q_FT01 < 100.0), PT := T#30s);
+        IF T_ARR.Q THEN PasoActual := S4; END_IF;
+        IF T_PAR.Q THEN PasoActual := S2; END_IF;
+
+    S4:  // 4 bombas activas
+        NumBombasReq := 4;
+        T_PAR(IN := (Q_FT01 < 150.0), PT := T#30s);
+        IF T_PAR.Q THEN PasoActual := S3; END_IF;
+
+END_CASE;
+
+// Deteccion de retorno completo a S0 -> avanza puntero de rotacion
+IF (PasoActual = S0) AND (PasoActualAnterior <> S0) THEN
+    idx_lider := (idx_lider + 1) MOD 4;
+END_IF;
+PasoActualAnterior := PasoActual;
+
+// ---------------------------------------------------------------------
+// FC3: FC_SeleccionRotacion
+// Construye 'orden[0..3]' desde idx_lider, salta bombas no disponibles,
+// y activa las primeras NumBombasReq bombas disponibles del vector.
+// ---------------------------------------------------------------------
+FOR k := 0 TO 3 DO
+    orden[k] := ((idx_lider + k) MOD 4) + 1;   // 1..4
+END_FOR;
+
+activadas := 0;
+FOR k := 0 TO 3 DO
+    bx := orden[k];
+    IF (activadas < NumBombasReq) AND Bombas[bx].Disponible THEN
+        SFC_CMD[bx] := TRUE;
+        activadas := activadas + 1;
+    ELSE
+        SFC_CMD[bx] := FALSE;
+    END_IF;
+END_FOR;
+
+// ---------------------------------------------------------------------
+// FB1 Network 4 (LAD, replicada para x = 1..4): Comando de salida Q_Bx
+// ---------------------------------------------------------------------
+FOR x := 1 TO 4 DO
+    Q_B[x] := (I_MODE_AUTO AND SFC_CMD[x])
+            OR (NOT I_MODE_AUTO AND I_B_MAN[x] AND NOT Bombas[x].Falla AND M_SIST_RUN);
+END_FOR;
+
+// ---------------------------------------------------------------------
+// Modo manual: SFC forzado a S0 (no interviene sobre Q_Bx en manual)
+// ---------------------------------------------------------------------
+IF NOT I_MODE_AUTO THEN
+    PasoActual := S0;
+END_IF;
+\end{lstlisting}
 
 \end{document}
