@@ -1,0 +1,806 @@
+    \documentclass[conference]{IEEEtran}
+\usepackage[spanish]{babel}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{siunitx}
+\usepackage{float}
+\usepackage{placeins}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{grffile}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{gray}\itshape,
+  stringstyle=\color{teal},
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  xleftmargin=1.5em,
+  captionpos=b
+}
+
+% Placeholder visual para figuras aún no disponibles (no requiere archivo externo).
+% Uso: \imgplaceholder{<alto>}{<descripcion de la imagen a insertar>}
+\newcommand{\imgplaceholder}[2]{%
+  \fbox{\begin{minipage}[c][#1][c]{\dimexpr\linewidth-2\fboxsep-2\fboxrule}%
+    \centering\itshape\small #2
+  \end{minipage}}%
+}
+
+\begin{document}
+
+\title{ Práctica 1 de Laboratorio: Control mediante retroalimentación de estados }
+
+\author{
+    \IEEEauthorblockN{
+         García Araque Daniel, Santiago Albornoz Paez, Ivan Torralba
+    }
+    \IEEEauthorblockA{Ingeniería en Mecatrónica\\
+    Universidad Militar Nueva Granada\\
+    Cajicá, Colombia\\
+  }
+}
+
+\maketitle
+
+\begin{abstract}
+En el marco de la asignatura Tópicos Avanzados de Control, este documento aborda el desarrollo técnico y la simulación de un esquema de control por realimentación de estados para un péndulo de rueda inercial. A partir de los parámetros físicos del prototipo, se formuló la representación en espacio de estados y sus respectivas formas canónicas (controlable y observable). Para la asignación de polos, se emplearon tres estrategias equivalentes: la fórmula de Ackermann, la equiparación de coeficientes y la compensación mediante matrices de pesos. Adicionalmente, el diseño contempló un observador de estados con una velocidad diez veces superior a la del controlador, junto a un servosistema con acción integral orientado al seguimiento de señales escalón. Los resultados en MATLAB validaron la dinámica en lazo cerrado (con respuestas subamortiguadas y críticamente amortiguadas), garantizando tanto la convergencia del estimador como la precisión ante referencias.
+
+\vspace{1em}
+\noindent \textbf{\textit{Palabras clave---}} Realimentación de estados, Péndulo de rueda inercial, Espacio de estados, Asignación de polos (Método de Ackermann), Observador de estados,Servosistema integral, Simulación en MATLAB.
+\end{abstract}
+
+\section{Introducción}
+
+Las técnicas tradicionales de control —como el lugar geométrico de las raíces y la respuesta en frecuencia— están orientadas al análisis de sistemas de una entrada y una salida (SISO) lineales e invariantes en el tiempo, basándose estrictamente en relaciones entrada-salida mediante funciones de transferencia \cite{ogata_discreto}. Aunque su cálculo es conceptualmente accesible, presentan limitaciones severas ante dinámicas no lineales o esquemas multivariables (MIMO) con acoplamientos complejos y requerimientos de control óptimo o adaptable. Para este tipo de configuraciones, la representación en espacio de estados constituye una metodología de análisis y síntesis mucho más versátil y rigurosa.
+
+Este enfoque condensa la dinámica del sistema en un sistema de $n$ ecuaciones diferenciales de primer orden escritas en notación matricial. Esta formulación no solo simplifica el tratamiento matemático, sino que abarca clases globales de señales de entrada e incorpora las condiciones iniciales desde la fase de diseño, aspecto que la teoría clásica no considera de forma explícita \cite{ogata_discreto}.
+
+Desde el punto de vista teórico, el \textbf{estado} de un sistema dinámico equivale a la cantidad mínima de variables que, conocidas en un instante inicial $t=t_0$ junto con las entradas futuras $t \geq t_0$, determinan totalmente la respuesta del sistema para cualquier tiempo posterior \cite{ogata_discreto}. Al agrupar estas variables en el \textbf{vector de estado} $\vec{x}$, se define un hiperespacio de $n$ dimensiones conocido como \textbf{espacio de estados} \cite{kuo_digital}. La representación matemática canónica responde a la estructura:
+
+\begin{equation}
+\dot{\vec{x}}(t) = A\vec{x}(t) + Bu(t)
+\end{equation}
+\begin{equation}
+y(t) = C\vec{x}(t) + Du(t)
+\end{equation}
+
+Mediante la ley de control por realimentación de estados $u = -K\vec{x}$, la matriz del sistema en lazo cerrado se reconfigura como $(A - BK)$, lo que permite asignar arbitrariamente la dinámica del sistema siempre que el par $(A,B)$ satisfaga la condición de controlabilidad. Cuando no es posible medir directamente todas las variables de $\vec{x}$, se implementa un \textbf{observador de estados} para estimar su valor mediante la salida $y(t)$, donde la dinámica del error de estimación se ajusta a través de los autovalores de la matriz $(A - LC)$ \cite{unam_tutorial}. Por último, en aplicaciones donde la salida debe seguir referencias de posición o velocidad, la arquitectura del \textbf{servosistema} integra un compensador de acción integral que aumenta en una unidad el orden del sistema, garantizando un error nulo en régimen permanente ante consignas de tipo escalón.
+
+A continuación, se detalla el modelo dinámico del péndulo con rueda de reacción utilizado en el laboratorio, sus formas canónicas, el diseño paso a paso del regulador, observador y servosistema mediante los tres métodos propuestos, y los resultados de simulación generados en MATLAB.
+
+\section{Objetivos}
+
+Reforzar los conceptos adquiridos del control en espacio de estados, incluyendo el uso de perturbaciones y observando el comportamiento de los controladores como filtros.
+
+\subsection*{Objetivos Específicos}
+\begin{itemize}
+    \item Modelar el sistema mediante la representación en variables de estado bajo la forma canónica controlable y la forma canónica observable.
+    \item Simular el sistema en espacio de estados usando MATLAB considerando perturbaciones.
+    \item Controlar el sistema usando la ley de control $u=-K\vec{x}$.
+    \item Diseñar observadores de estados.
+    \item Simular controladores por retroalimentación de estados e identificar su comportamiento como filtro.
+\end{itemize}
+
+\section{Marco Teórico}
+
+\subsection*{Variables y espacio de estado}
+El comportamiento completo de un sistema dinámico se define a partir de un conjunto mínimo e independiente de variables, conocidas como variables de estado. Específicamente, si se dispone de $n$ magnitudes $x_1,x_2,\dots,x_n$ tales que, conociendo su estado en $t=t_0$ y el perfil de entrada para $t\geq t_0$, es posible determinar de forma unívoca la respuesta del sistema en cualquier instante futuro, dichas componentes conforman las variables de estado \cite{ogata_discreto}. Aunque en términos teóricos estas variables no están obligadas a ser magnitudes físicamente medibles, en aplicaciones prácticas se procura seleccionar variables reales y de fácil adquisición por sensores para simplificar la instrumentación del sistema.
+
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\linewidth]{1.png}
+    \caption{Representación de estados de un sistema (diagrama de bloques $A(t)$, $B(t)$, $C(t)$, $D(t)$), reproducida de la guía de laboratorio \cite{unam_tutorial}.}
+    \label{fig:placeholder}
+\end{figure}
+
+\subsection*{Observadores de estado}
+En escenarios donde la medición directa de la totalidad del vector de estados $\vec{x}$ resulta inviable, se diseña un observador de estados para estimar las variables no accesibles a partir de la salida observable $y(t)=C\vec{x}(t)$. Estructuralmente, este estimador opera como una réplica del modelo de la planta al recibir la misma señal de entrada, pero añade una acción correctora basada en la diferencia entre la salida real y la estimada $\hat{y}(t)$. Dicha retroalimentación fuerza la convergencia de las variables estimadas $\hat{\vec{x}}$ hacia las reales, quedando la velocidad de estimación gobernada por la ubicación de los polos de la matriz $(A-LC)$ \cite{unam_tutorial}.
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\linewidth]{2.png}
+    \caption{Esquema del observador de estados (planta y copia con corrección $L(y-\hat y)$), reproducido de la guía de laboratorio \cite{unam_tutorial}.}
+    \label{fig:placeholder}
+\end{figure}
+
+
+
+\section{Modelado del Sistema: Péndulo con Rueda de Reacción}
+\label{sec:modelo}
+
+El sistema objeto de estudio corresponde a un péndulo con rueda de reacción (rueda inercial), donde el torque $\tau$ generado por el motor que acciona la rueda es la entrada (señal de control) del sistema. La salida corresponde a la posición angular $\theta_1$ de la barra respecto a la vertical, y $\theta_2$ es el ángulo entre la rueda y el eje del brazo (Figura~\ref{fig:pendulo}).
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\linewidth]{3.png}
+    \caption{Péndulo con rueda inercial: barra articulada en el pivote, rueda-motor en el extremo superior, ángulos $\theta_1$ (barra) y $\theta_2$ (rueda), reproducido de la guía de laboratorio.}
+    \label{fig:placeholder}
+\end{figure}
+% 1. VECTORES DE POSICIÓN Y VELOCIDAD
+\begin{equation}
+q = \begin{pmatrix} x \\ y \end{pmatrix}
+\end{equation}
+
+\begin{equation}
+\vec{r}_b = \begin{pmatrix} L_b \sin\theta \\ L_b \cos\theta \end{pmatrix}, \quad 
+\vec{r}_R = \begin{pmatrix} L \sin\theta \\ L \cos\theta \end{pmatrix}
+\end{equation}
+
+\begin{equation}
+\dot{\vec{r}}_b = \begin{pmatrix} L_b \dot{\theta} \cos\theta \\ -L_b \dot{\theta} \sin\theta \end{pmatrix}, \quad 
+\dot{\vec{r}}_R = \begin{pmatrix} L \dot{\theta} \cos\theta \\ -L \dot{\theta} \sin\theta \end{pmatrix}
+\end{equation}
+
+\begin{equation}
+\begin{aligned}
+|\dot{\vec{r}}_b|^2 &= (L_b \dot{\theta} \cos\theta)^2 + (L_b \dot{\theta} \sin\theta)^2 \\
+&= L_b^2 \dot{\theta}^2 (\cos^2\theta + \sin^2\theta) = L_b^2 \dot{\theta}^2
+\end{aligned}
+\end{equation}
+
+\begin{equation}
+|\dot{\vec{r}}_R|^2 = L^2 \dot{\theta}^2
+\end{equation}
+
+
+% 2. VELOCIDADES ANGULARES
+\begin{equation}
+\vec{\omega}_b = \begin{pmatrix} 0 \\ 0 \\ \dot{\theta} \end{pmatrix} \implies |\vec{\omega}_b|^2 = \dot{\theta}^2
+\end{equation}
+
+\begin{equation}
+\vec{\omega}_r = \begin{pmatrix} 0 \\ 0 \\ \dot{\theta} + \dot{\phi} \end{pmatrix} \implies |\vec{\omega}_r| = \dot{\theta} + \dot{\phi}
+\end{equation}
+
+
+% 3. FORMULACIÓN DE EULER-LAGRANGE
+\begin{equation}
+\frac{d}{dt}\left(\frac{\partial \mathcal{L}}{\partial \dot{q}}\right) - \frac{\partial \mathcal{L}}{\partial q} = \tau
+\end{equation}
+
+\begin{equation}
+K_{bt} = \frac{1}{2} m_b |\dot{\vec{r}}_b|^2 = \frac{1}{2} m_b L_b^2 \dot{\theta}^2
+\end{equation}
+
+\begin{equation}
+K_{Rt} = \frac{1}{2} m_R |\dot{\vec{r}}_R|^2 = \frac{1}{2} m_R L^2 \dot{\theta}^2
+\end{equation}
+
+\begin{equation}
+K_{b,\text{rot}} = \frac{1}{2} I_b |\vec{\omega}_b|^2 = \frac{1}{2} I_b \dot{\theta}^2
+\end{equation}
+
+\begin{equation}
+K_{R,\text{rot}} = \frac{1}{2} I_R |\vec{\omega}_r|^2 = \frac{1}{2} I_R (\dot{\theta} + \dot{\phi})^2
+\end{equation}
+
+\begin{equation}
+P_b = m_b g L_b \cos\theta, \quad P_R = m_R g L \cos\theta
+\end{equation}
+
+\begin{equation}
+\begin{aligned}
+\mathcal{L} &= \frac{1}{2} m_b L_b^2 \dot{\theta}^2 + \frac{1}{2} I_b \dot{\theta}^2 + \frac{1}{2} m_R L^2 \dot{\theta}^2 \\
+&\quad + \frac{1}{2} I_R (\dot{\theta} + \dot{\phi})^2 - (m_b g L_b + m_R g L)\cos\theta
+\end{aligned}
+\end{equation}
+
+\begin{equation}
+I_b = \bar{I}_b + m_b L_b^2
+\end{equation}
+
+\begin{equation}
+\begin{aligned}
+\mathcal{L} &= \frac{1}{2} I_b \dot{\theta}^2 + \frac{1}{2} m_R L^2 \dot{\theta}^2 + \frac{1}{2} I_R (\dot{\theta} + \dot{\phi})^2 \\
+&\quad - (m_b L_b + m_R L) g \cos\theta
+\end{aligned}
+\end{equation}
+
+
+% 4. DERIVADAS DEL LAGRANGIANO
+\begin{equation}
+\begin{aligned}
+\frac{\partial \mathcal{L}}{\partial \dot{\theta}} &= I_b \dot{\theta} + m_R L^2 \dot{\theta} + \frac{1}{2} I_R (2\dot{\theta} + 2\dot{\phi}) \\
+&= (I_b + m_R L^2 + I_R) \dot{\theta} + I_R \dot{\phi}
+\end{aligned}
+\end{equation}
+
+\begin{equation}
+\frac{\partial \mathcal{L}}{\partial \theta} = (m_b L_b + m_R L) g \sin\theta
+\end{equation}
+
+\begin{equation}
+\frac{d}{dt}\left(\frac{\partial \mathcal{L}}{\partial \dot{\theta}}\right) = (I_b + m_R L^2 + I_R) \ddot{\theta} + I_R \ddot{\phi}
+\end{equation}
+
+\begin{equation}
+\frac{\partial \mathcal{L}}{\partial \dot{\phi}} = I_R (\dot{\theta} + \dot{\phi}) \implies \frac{d}{dt}\left(\frac{\partial \mathcal{L}}{\partial \dot{\phi}}\right) = I_R (\ddot{\theta} + \ddot{\phi})
+\end{equation}
+
+\begin{equation}
+\begin{aligned}
+&(I_b + m_R L^2 + I_R) \ddot{\theta} + I_R \ddot{\phi} \\
+&\quad - (m_b L_b + m_R L) g \sin\theta = -\tau
+\end{aligned}
+\end{equation}
+
+
+% 5. SUBSISTEMA DEL MOTOR Y TORQUE
+\begin{equation}
+I_R (\ddot{\theta} + \ddot{\phi}) = \tau
+\end{equation}
+
+\begin{equation}
+V(t) = R_a I_a(t) + L_a \frac{dI_a(t)}{dt} + K_e \dot{\phi}(t)
+\end{equation}
+
+\begin{equation}
+I_a(t) = \frac{V(t) - K_e \dot{\phi}(t)}{R_a}
+\end{equation}
+
+\begin{equation}
+\tau(t) = K_t I_a(t) = \frac{K_t}{R_a} V(t) - \frac{K_t K_e}{R_a} \dot{\phi}(t)
+\end{equation}
+
+\begin{equation}
+\ddot{\phi} = \frac{K_t}{R_a I_N} V(t) - \frac{K_t K_e}{R_a I_N} \dot{\phi}(t)
+\end{equation}
+
+\begin{equation}
+K_m = \frac{K_t}{R_a I_N}, \quad P_m = \frac{K_t K_e}{R_a I_N}
+\end{equation}
+
+\begin{equation}
+\ddot{\phi} + P_m \dot{\phi} = K_m V
+\end{equation}
+
+
+% 6. ECUACIONES DINÁMICAS NO LINEALES
+\begin{equation}
+a = I_b + m_R L^2 + 2 I_R, \quad b = (m_b L_b + m_R L) g
+\end{equation}
+
+\begin{equation}
+\ddot{\theta} + 2 I_N \ddot{\phi} = b \sin\theta
+\end{equation}
+
+\begin{equation}
+\ddot{\theta} = \frac{b \sin\theta - 2 I_N K_m V + 2 I_N P_m \dot{\phi}}{a}
+\end{equation}
+
+
+% 7. LINEALIZACIÓN Y ESPACIO DE ESTADOS
+\begin{equation}
+x_1 = \theta_E, \quad x_2 = \omega_p, \quad x_3 = \phi_E, \quad x_4 = \omega_N
+\end{equation}
+
+\begin{equation}
+\setlength{\arraycolsep}{2pt}
+\begin{aligned}
+\begin{bmatrix} \dot{\theta}_E \\ \dot{\omega}_p \\ \dot{\phi}_E \\ \dot{\omega}_N \end{bmatrix} &= 
+\begin{bmatrix} 
+0 & 1 & 0 & 0 \\ 
+\frac{b}{a} \cos\bar{\theta}_E & 0 & 0 & \frac{2 I_N P_m}{a} \\ 
+0 & 0 & 0 & 1 \\ 
+0 & 0 & 0 & -P_m 
+\end{bmatrix} 
+\begin{bmatrix} \theta_E \\ \omega_p \\ \phi_E \\ \omega_N \end{bmatrix} \\
+&\quad + 
+\begin{bmatrix} 0 \\ -\frac{2 I_N K_m}{a} \\ 0 \\ K_m \end{bmatrix} V(t)
+\end{aligned}
+\end{equation}
+
+\begin{equation}
+y = \begin{bmatrix} 1 & 0 & 0 & 0 \end{bmatrix} \begin{bmatrix} \theta_E \\ \omega_p \\ \phi_E \\ \omega_N \end{bmatrix}
+\end{equation}
+
+
+% 8. FUNCIÓN DE TRANSFERENCIA
+\begin{equation}
+G(s) = C(sI - A)^{-1} B + D
+\end{equation}
+
+\begin{equation}
+\begin{aligned}
+G(s) &= \frac{\Theta(s)}{V(s)} \\
+&= \frac{-2 I_N K_m (2 P_m + s)}{(P_m + s)\left[(I_b + 2 I_N + L^2 m_R)s^2 - g(L m_R + L_b m_b)\right]}
+\end{aligned}
+\end{equation}
+\subsection{Parámetros físicos}
+
+Los parámetros físicos del sistema, tomados del script de simulación desarrollado en MATLAB, se resumen en la Tabla~\ref{tab:parametros}.
+
+\begin{table}[H]
+\centering
+\caption{Parámetros físicos del péndulo con rueda de reacción}
+\label{tab:parametros}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|c|l|c|}
+\hline
+\textbf{Símbolo} & \textbf{Descripción} & \textbf{Valor} \\
+\hline
+$M_b$ & Masa de la barra & \SI{0.7}{kg} \\
+\hline
+$L_b$ & Distancia al centro de masa de la barra & \SI{0.1555}{m} \\
+\hline
+$M_r$ & Masa de la rueda & \SI{0.375}{kg} \\
+\hline
+$L$ & Longitud de la barra & \SI{0.25}{m} \\
+\hline
+$I_r$ & Inercia de la rueda & $6.231\times10^{-4}\,\si{kg.m^2}$ \\
+\hline
+$I_b$ & Inercia de la barra & $0.0247\,\si{kg.m^2}$ \\
+\hline
+$g$ & Gravedad & \SI{9.81}{m/s^2} \\
+\hline
+$K_m$ & Constante del motor & 202.5 \\
+\hline
+$p_m$ & Polo eléctrico del motor & 24.93 \\
+\hline
+\end{tabular}
+\end{table}
+
+Con estos parámetros se definen las constantes agrupadas $a = I_b + M_r L^2 + 2I_r = 0.04938\,\si{kg.m^2}$ y $b=(M_b L_b + M_r L)g = 1.9875$, evaluadas en el punto de operación vertical ($\theta_{1,\text{op}}=0$).
+
+\subsection{Representación en espacio de estados}
+
+Reduciendo el modelo a tres estados medibles $\vec{x} = [\theta_1,\ \omega_1,\ \omega_r]^T$ (posición angular de la barra, velocidad angular de la barra y velocidad angular de la rueda), y eliminando la coordenada $\phi$ por ser inobservable y no afectar la dinámica de estabilización, se obtienen las matrices de estado estándar:
+
+\begin{equation}
+A = \begin{bmatrix} 0 & 1 & 0 \\ 40.246 & 0 & -0.6291 \\ 0 & 0 & -24.93 \end{bmatrix},\quad
+B = \begin{bmatrix} 0 \\ -5.1101 \\ 202.5 \end{bmatrix}
+\end{equation}
+\begin{equation}
+C = \begin{bmatrix} 1 & 0 & 0 \end{bmatrix}, \quad D = 0
+\end{equation}
+
+\section{Formas Canónicas Controlable y Observable}
+
+A partir de las matrices de controlabilidad $\mathcal{M}_{ctrl}=[B\ AB\ A^2B]$ y observabilidad $\mathcal{M}_{obsv}=[C;CA;CA^2]$, y empleando la matriz de Toeplitz de los coeficientes del polinomio característico de $A$, se calcularon las matrices de transformación de similitud $T_{cc}$ y $T_{co}$ y las representaciones canónicas correspondientes.
+
+\subsection{Forma canónica controlable (FCC)}
+\begin{equation}
+A_{cc} \approx \begin{bmatrix} 0 & 1 & 0 \\ 0 & 0 & 1 \\ 1003.3 & 40.2 & -24.9 \end{bmatrix},\quad
+B_{cc} = \begin{bmatrix} 0 \\ 0 \\ 1 \end{bmatrix}
+\end{equation}
+\begin{equation}
+C_{cc} \approx \begin{bmatrix} -254.79 & -5.11 & 0 \end{bmatrix}
+\end{equation}
+
+\subsection{Forma canónica observable (FCO)}
+\begin{equation}
+A_{co} \approx \begin{bmatrix} 0 & 0 & 1003.3 \\ 1.0 & 0 & 40.2 \\ 0 & 1.0 & -24.9 \end{bmatrix},\quad
+B_{co} \approx \begin{bmatrix} -254.79 \\ -5.11 \\ 0 \end{bmatrix}
+\end{equation}
+\begin{equation}
+C_{co} = \begin{bmatrix} 0 & 0 & 1 \end{bmatrix}
+\end{equation}
+
+Se verificó, mediante \texttt{rank(ctrb(A,B))=3} y \texttt{rank(obsv(A,C))=3}, que el sistema es completamente controlable y observable en el punto de operación vertical, condición necesaria para la ubicación arbitraria de polos tanto del controlador como del observador.
+
+\section{Diseño del Controlador por Retroalimentación de Estados}
+\label{sec:controlador}
+
+Se diseñó un servosistema con compensador integrante (estado aumentado de dimensión $n+1=4$), ubicando dos polos dominantes con $\zeta_d=0.6$ y tiempo de asentamiento deseado $t_{s,d}=\SI{2.0}{s}$ ($\omega_{n,d}=4/(\zeta_d t_{s,d})$), y dos polos rápidos no dominantes en $10\zeta_d\omega_{n,d}$, de forma que no afecten la respuesta dominante. El polinomio característico deseado resultante es:
+
+\begin{equation}
+p_d(s) = s^4 + 44.0\,s^3 + 571.1\,s^2 + 2044.4\,s + 4444.4
+\end{equation}
+
+Las ganancias $K$ y $K_i$ se calcularon mediante tres metodologías: (1) asignación directa de coeficientes, (2) compensación por matriz de pesos (transformación de Toeplitz) y (3) el método de Ackermann. Como era de esperarse para un sistema controlable, las tres metodologías arrojan resultados numéricamente idénticos, lo cual valida el diseño. Los resultados, obtenidos con la representación estándar del sistema, se resumen en la Tabla~\ref{tab:controlador}.
+
+\begin{table}[H]
+\centering
+\caption{Ganancias del controlador por retroalimentación de estados (representación estándar), tres métodos}
+\label{tab:controlador}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Ganancia} & \textbf{Valor} \\
+\hline
+$K_1$ ($\theta_1$) & $-12.896$ \\
+\hline
+$K_2$ ($\omega_1$) & $-2.141$ \\
+\hline
+$K_3$ ($\omega_r$) & $0.0401$ \\
+\hline
+$K_i$ (integral) & $-17.444$ \\
+\hline
+\end{tabular}
+\end{table}
+
+Se obtuvieron adicionalmente las ganancias equivalentes para la forma canónica controlable ($K_{cc}\approx[2958.6,\ 611.4,\ 19.1]$) y observable ($K_{co}\approx[-0.0638,\ -0.5498,\ 0.8100]$, ambas con $K_i=-17.444$); su magnitud difiere respecto de $K$ estándar porque cada representación opera sobre una base de estados distinta (relacionada por las transformaciones $T_{cc}$, $T_{co}$), pero el sistema en lazo cerrado resultante --- y por tanto su respuesta entrada-salida --- es el mismo en los tres casos.
+
+
+\section{Resultados de la Práctica}
+\label{sec:resultados}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{4.png}
+    \caption{Sistema no lineal}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{5.png}
+    \caption{Resultados 1}
+    \label{fig:placeholder}
+\end{figure}
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=1.0\linewidth]{6.png}
+    \caption{Resultado 6}
+    \label{fig:placeholder}
+\end{figure}
+
+El esquema de Simulink compara en paralelo la respuesta del modelo no lineal del péndulo contra sus tres equivalentes lineales (espacio de estados, forma canónica controlable y forma canónica observable) ante entradas escalón y senoidal.En el Scope 17, los tres modelos lineales entregan una respuesta idéntica y acotada en forma de onda senoidal (con amplitud fija de $\pm 0.07$), lo que valida la equivalencia matemática entre las transformaciones canónicas en la región lineal. Por el contrario, el Scope 18 evidencia el comportamiento del modelo no lineal en lazo abierto: tras mantenerse cerca de cero, a los $47\text{ s}$ sufre una divergencia numérica drástica cayendo a $-10^{134}$. Esto refleja la inestabilidad física real del péndulo al caer por acción de la gravedad, demostrando que la aproximación lineal solo es válida para pequeños ángulos y justificando la necesidad de aplicar un control por retroalimentación de estados para estabilizarlo.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{7.png}
+    \caption{Metodo 1}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{8.png}
+    \caption{Metodo 1}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{9.png}
+    \caption{Metodo 1}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{10.png}
+    \caption{Resultado}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{11.png}
+    \caption{Resultado}
+    \label{fig:placeholder}
+\end{figure}
+
+Las imágenes muestran la simulación del servosistema en lazo cerrado implementado mediante tres metodologías distintas de diseño: Asignación directa de polos, Matriz de pesos y Método de Ackermann.Equivalencia de las metodologías (Scope 4): Las tres gráficas (Sum7, Sum11 y Sum15) se superponen exactamente en una sola curva. Esto demuestra matemáticamente que las tres técnicas son totalmente equivalentes y calculan la misma matriz de ganancia $K$.Desempeño del servosistema (Scope 5): Ante un escalón de referencia aplicado a los $5\text{ s}$ (con valor de consigna igual a $5$), la salida presenta una respuesta subamortiguada muy estable, alcanzando un sobrepico controlado de $5.46$ y estabilizándose rápidamente en $5.0$. La acción del compensador integral en la estructura del servosistema garantiza error nulo en régimen permanente.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{12.png}
+    \caption{Metodo 2}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{13.png}
+    \caption{Metodo 2}
+    \label{fig:placeholder}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{14.png}
+    \caption{Metodo 2}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{15.png}
+    \caption{Resultado}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{16.png}
+    \caption{Resultado}
+    \label{fig:placeholder}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{17.png}
+    \caption{Resultado}
+    \label{fig:placeholder}
+\end{figure}
+
+Las imágenes muestran la simulación del servosistema implementado con las tres metodologías de diseño (asignación directa, matriz de pesos y Ackermann) aplicadas específicamente sobre la forma canónica controlable del sistema ($A_{cc}, B_{cc}, C_{cc}$).Respuestas individuales (Scopes 6, 11 y 13): Ante la entrada escalón de valor $5$ aplicada a los $5\text{ s}$, cada esquema entrega una respuesta subamortiguada idéntica, con un sobrepico cercano a $5.45$ y estabilización exacta en $5.0$ gracias al compensador integral.Superposición y validación (Scope 7): Las tres salidas (Sum19, Sum31 y Sum39) se traslapan perfectamente en una sola línea. Esto demuestra que la transformación a la forma canónica controlable preserva la equivalencia matemática de los tres métodos de diseño y mantiene la misma dinámica del servosistema.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{18.png}
+    \caption{Enter Caption}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{19.png}
+    \caption{Metodo 3}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{20.png}
+    \caption{Metodo 3}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{21.png}
+    \caption{Metodo 3}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{22.png}
+    \caption{Resultado}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{23.png}
+    \caption{Resultado}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{24.png}
+    \caption{Resultado}
+    \label{fig:placeholder}
+\end{figure}
+Las imágenes muestran la simulación del servosistema implementado con las tres metodologías de diseño (asignación de polos, matriz de pesos y Ackermann) aplicadas específicamente sobre la forma canónica observable del sistema ($A_{co}, B_{co}, C_{co}, D_{co}, E_{co}, F_{co}$).Respuestas individuales (Scopes 8, 10, etc.): Ante el escalón de amplitud $5$ aplicado a los $5\text{ s}$, se observa la misma respuesta subamortiguada con un sobrepico cercano a $5.45$ y un asentamiento exacto en $5.0$ debido a la acción del compensador integral.Superposición y validación (Scopes 15 y 16): Las respuestas de los tres métodos (Sum11, Sum31, Sum27 en Scope 16 y Sum7, Sum19, Sum23 en Scope 15) se traslapan perfectamente en una sola curva. Esto valida que la transformación a la forma canónica observable mantiene la equivalencia matemática entre las técnicas de diseño y preserva la dinámica del servosistema.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{25.png}
+    \caption{Observador Metodo 1}
+    \label{fig:placeholder}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{26.png}
+    \caption{Resultado}
+    \label{fig:placeholder}
+\end{figure}
+Estructura del diagrama de bloques: Se observa la planta real y la estimación realizada por el observador de orden completo. La realimentación de estados se realiza a través de las variables estimadas y el error de estimación (diferencia entre la salida real y la estimada) reinyecta la corrección mediante la ganancia $K$.Respuesta temporal (Scope24 / Sum64): Mantiene la dinámica subamortiguada esperada ante el escalón de amplitud $5$ aplicado a los $5\text{ s}$, alcanzando un sobrepico cercano a $5.45$ y estabilizándose exactamente en $5.0$. Esto confirma que el observador fue diseñado adecuadamente con polos más rápidos que la planta, permitiendo que la estimación converja sin distorsionar la respuesta deseada del servosistema (principio de separación).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{27.png}
+    \caption{Observador Metodo 1}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{28.png}
+    \caption{Resultado}
+    \label{fig:placeholder}
+\end{figure}
+Estructura del diagrama de bloques: Muestra la planta en su representación matricial estándar (matA, matB, matC, matD, matE, matF) junto al observador de orden completo. La realimentación del sistema se realiza con las variables de estado estimadas, utilizando el error entre la salida real y la estimada para corregir la estimación mediante las ganancias calculadas por matriz de pesos.Respuesta temporal (Scope25 / Sum71): Presenta la respuesta ante la entrada escalón de valor $5$ aplicada a los $5\text{ s}$. Mantiene exactamente la misma respuesta subamortiguada que los casos anteriores (sobrepico cercano a $5.45$ y valor en estado estable de $5.0$), confirmando que el observador por matriz de pesos reconstruye los estados adecuadamente sin alterar la dinámica especificada para el servosistema.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{29.png}
+    \caption{Observador Metodo 1}
+    \label{fig:placeholder}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{30.png}
+    \caption{Resultado}
+    \label{fig:placeholder}
+\end{figure}
+Estructura del diagrama de bloques: Representa la planta en su forma matricial estándar (matA, matB, matC, matD, matE, matF) acoplada a un observador de orden completo cuya ganancia de estimación se determinó mediante la fórmula de Ackermann. La realimentación del control se realiza utilizando las variables de estado estimadas.
+
+Respuesta temporal (Scope26): Muestra el comportamiento del sistema ante una entrada escalón de valor 5 a los 5 s. Se observa exactamente la misma curva subamortiguada con sobrepico cercano a 5.45 y convergencia al valor de 5.0, validando la correcta estimación de los estados y la aplicación del principio de separación con la fórmula de Ackermann.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{31.png}
+    \caption{Observador Metodo 2}
+    \label{fig:placeholder}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{32.png}
+    \caption{Resultado}
+    \label{fig:placeholder}
+\end{figure}
+
+Estructura del diagrama de bloques: Representa la planta real en la forma canónica controlable junto con el observador de orden completo de la misma forma canónica, cuyas ganancias de estimación fueron calculadas por asignación de polos.Respuesta temporal (Scope21): Muestra una línea constante en cero ($0$). Esto se debe a que la gráfica monitorea el error de estimación ($e(t) = y(t) - \hat{y}(t)$). Al tener la planta y el observador condiciones iniciales idénticas (nulas), la estimación es perfecta desde el inicio ($t=0$), haciendo que el error se mantenga exactamente en cero durante toda la respuesta dinámica.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{33.png}
+    \caption{Observador Metodo 2}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{34.png}
+    \caption{Resultado}
+    \label{fig:placeholder}
+\end{figure}
+
+
+Estructura del diagrama de bloques: Representa la planta real en la forma canónica controlable junto a un observador de orden completo de la misma forma, cuya ganancia de estimación se calculó mediante el método de matriz de pesos. La realimentación del servosistema se realiza empleando los estados estimados.Respuesta temporal (Scope28): Muestra la respuesta de la salida ante el escalón de valor $5$ aplicado a los $5\text{ s}$. Preserva la dinámica subamortiguada deseada (sobrepico cercano a $5.45$ y valor final en $5.0$), validando que el observador por matriz de pesos bajo la forma canónica controlable reconstruye los estados con precisión sin alterar la respuesta en lazo cerrado.
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{35.png}
+    \caption{Observador Metodo 2}
+    \label{fig:placeholder}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{36.png}
+    \caption{Resultado}
+    \label{fig:placeholder}
+\end{figure}
+Estructura del diagrama de bloques: Muestra la planta real en la forma canónica controlable acoplada a un observador de orden completo de la misma forma canónica, con ganancias de estimación calculadas mediante la fórmula de Ackermann. La realimentación del servosistema utiliza los estados estimados.Respuesta temporal (Scope22): Muestra una línea plana constante en cero ($0$). La señal monitoreada corresponde al error de estimación ($e(t) = y(t) - \hat{y}(t)$). Al partir la planta y el observador con las mismas condiciones iniciales nulas, la estimación de los estados es exacta desde $t=0$, lo que mantiene el error de salida en cero durante todo el régimen dinámico.
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{37.png}
+    \caption{Observador Metodo 3}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{38.png}
+    \caption{Resultado}
+    \label{fig:placeholder}
+\end{figure}
+
+Estructura del diagrama de bloques: Representa la planta real en la forma canónica observable acoplada a un observador de orden completo en la misma representación canónica. La realimentación del servosistema se realiza utilizando los estados estimados reconstruidos por el observador.Respuesta temporal (Scope29): Muestra la salida del sistema ante la entrada escalón de valor $5$ a los $5\text{ s}$. Se mantiene la respuesta subamortiguada esperada (sobrepico en $5.45$ y estabilización en $5.0$), confirmando que el observador en la forma canónica observable reconstruye los estados correctamente y preserva el comportamiento en lazo cerrado.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{39.png}
+    \caption{Observador Metodo 3}
+    \label{fig:placeholder}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{40.png}
+    \caption{Resultado}
+    \label{fig:placeholder}
+\end{figure}
+Estructura del diagrama de bloques: Representa la planta del servosistema descrita en la forma canónica observable acoplada a un observador de orden completo en la misma representación. El control del sistema en lazo cerrado se realiza mediante la realimentación de los estados estimados por el observador.Respuesta temporal (Scope23): Corresponde a la salida del sistema ante la entrada escalón de valor $5$ aplicada en $t = 5\text{ s}$. Mantiene el comportamiento subamortiguado deseado (sobrepico en $5.45$ y valor final en $5.0$), demostrando la correcta reconstrucción de los estados y la validez del principio de separación en la representación observable.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{41.png}
+    \caption{Observador Metodo 3}
+    \label{fig:placeholder}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{42.png}
+    \caption{Resultado}
+    \label{fig:placeholder}
+\end{figure}
+
+Estructura del diagrama de bloques: Muestra la planta del servosistema en su forma canónica observable acoplada a un observador de orden completo de la misma forma, cuyas ganancias de estimación fueron calculadas usando la fórmula de Ackermann. Los estados estimados reconstruidos se emplean para cerrar el lazo de control.Respuesta temporal (Scope27): Muestra la respuesta del sistema ante la entrada escalón de valor $5$ a los $5\text{ s}$. Mantiene idéntico comportamiento subamortiguado que los diseños anteriores (sobrepico cercano a $5.45$ y estabilización en $5.0$), confirmando la correcta estimación de los estados y la validez de la fórmula de Ackermann en la representación observable.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{43.png}
+    \caption{Matrices}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{44.png}
+    \caption{Matrices}
+    \label{fig:placeholder}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{45.png}
+    \caption{Matrices}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1.0\linewidth]{46.png}
+    \caption{Matrices}
+    \label{fig:placeholder}
+\end{figure}
+
+\section{Conclusiones}
+
+\begin{enumerate}
+   \begin{itemize}
+    \item Se dedujo el modelo dinámico no lineal del péndulo con rueda de reacción mediante la formulación de Euler-Lagrange, capturando el acoplamiento dinámico entre la estructura mecánica y el subsistema eléctrico del motor.
+    \item La linealización por Jacobiano sobre el punto de equilibrio vertical ($\theta = 0$) confirmó la inestabilidad intrínseca del sistema en lazo abierto al presentar polos en el semiplano derecho del plano $s$.
+    \item Se obtuvo el modelo en espacio de estados y sus representaciones canónicas controlable y observable, verificando la controlabilidad y observabilidad completa del sistema en el punto de operación vertical.
+    \item La simplificación de la inductancia del inducido ($L_a \approx 0$) redujo la complejidad del modelo del motor a una relación algebraica de par sin comprometer la precisión del control de la masa de reacción.
+    \item Se diseñaron controladores por retroalimentación de estados mediante tres metodologías equivalentes (asignación directa, matriz de pesos y Ackermann), obteniendo ganancias numéricamente idénticas que validan la unicidad de la solución de ubicación de polos.
+    \item El observador de estados diseñado con una dinámica diez veces más rápida que el controlador permitió una convergencia del error de estimación en aproximadamente una quinta parte del tiempo de asentamiento del controlador, validando el criterio de separación entre las dinámicas de observador y controlador.
+    \item El servosistema con compensador integrante logró seguimiento de referencia con error de estado estacionario nulo, confirmando la efectividad del integrador añadido para plantas sin polo en el origen.
+    \item La comparación entre los diseños subamortiguado y críticamente amortiguado evidenció el comportamiento del controlador por retroalimentación de estados como un filtro configurable, permitiendo ajustar el compromiso entre velocidad de respuesta y sobreimpulso mediante la selección del factor de amortiguamiento $\zeta$ de los polos dominantes.
+    \item La equivalencia matemática entre la función de transferencia $G(s) = \frac{\Theta(s)}{V(s)}$ y la representación $C(sI-A)^{-1}B$ reconfirmó la coherencia entre el dominio de la frecuencia y el espacio de estados.
+    \item La realimentación de estados logró trasladar exitosamente los polos inestables del sistema hacia el semiplano izquierdo del plano $s$, garantizando el equilibrio y la estabilización del péndulo ante perturbaciones externas.
+\end{itemize}
+\end{enumerate}
+
+\section{Preguntas para la Discusión}
+
+\begin{itemize}
+    \item \textit{Pregunta 1: ¿El controlador por retroalimentación de estados puede representar a un filtro de qué tipo?} La ley $u=-K\vec{x}$ ubica los polos en lazo cerrado, por lo que el sistema resultante se comporta como un filtro pasa-bajas de segundo orden dominante, cuyo ancho de banda y factor de amortiguamiento son directamente configurables mediante la elección de los polos deseados, como se evidenció al comparar los diseños con $\zeta=0.6$ y $\zeta=1.0$.
+    \item \textit{Pregunta 2: Hay diversas representaciones de los sistemas en espacio de estados, ¿el controlador para todas estas representaciones es el mismo?} No en magnitud numérica, pero sí en efecto: cada representación (estándar, FCC, FCO) requiere una matriz $K$ distinta, relacionada mediante las transformaciones de similitud $T_{cc}$, $T_{co}$, pero todas ubican exactamente los mismos polos en lazo cerrado y producen la misma respuesta entrada-salida.
+    \item \textit{Pregunta 3: ¿Para implementar un control por retroalimentación de estados en un sistema no lineal sería posible sin observadores de estado?} Solo sería posible si todos los estados del modelo linealizado son físicamente medibles con sensores; en el péndulo con rueda de reacción, $\omega_1$ y $\omega_r$ no siempre son medibles directamente, por lo que en la práctica se requiere un observador.
+    \item \textit{Pregunta 4: De ser afirmativa la respuesta anterior, ¿qué condiciones debería tener esta implementación?} Se requeriría instrumentación completa (sensores de posición y velocidad angular en barra y rueda) con ancho de banda y resolución suficientes, y el sistema debería permanecer dentro de la región de validez de la linealización utilizada para el diseño de $K$.
+\end{itemize}
+
+\bibliographystyle{IEEEtran}
+\begin{thebibliography}{99}
+
+\bibitem{ogata_discreto}
+K. Ogata, \textit{Sistemas de Control en Tiempo Discreto}, Prentice Hall Internacional, 1996.
+
+\bibitem{kuo_digital}
+B. C. Kuo, \textit{Digital Control System}, Rinehart and Winston, 1996.
+
+\bibitem{unam_tutorial}
+F. d. l. l. UNaM, ``Tutoriales de Control con MATLAB,'' Regents of University of Michigan, 18 Agosto 1997. [En línea]. Available: http://www.ib.cnea.gov.ar/~instyctl/Tutorial\_Matlab\_esp/index.html. [Último acceso: 22 Enero 2013].
+
+\bibitem{franklin_digital}
+G. F. Franklin, J. D. Powell y M. L. Workman, \textit{Digital Control of Dynamic Systems}, Prentice Hall, 1998.
+
+\bibitem{phillips_digital}
+C. Phillips, \textit{Digital Control System Analysis and Design}, Prentice Hall.
+
+\bibitem{constantine_digital}
+H. Constantine y G. B. Lamont, \textit{Digital Control Systems}, McGraw-Hill Companies.
+
+\end{thebibliography}
+
+\section*{Anexo: Código MATLAB}
+
+El siguiente listado corresponde al script \texttt{simulation.m}, empleado para obtener las matrices del sistema, las formas canónicas y las ganancias del controlador y del observador presentadas en las Secciones~\ref{sec:modelo}--\ref{sec:servo}.
+
+\lstinputlisting[language=Matlab, caption={Script de diseño: modelo, formas canónicas, controlador y observador}, label={lst:simulation_m}]{simulations/simulation.m}
+
+El siguiente listado corresponde al script \texttt{post\_process.m}, empleado para simular la respuesta en lazo cerrado y generar las Figuras~\ref{fig:respuesta_controlador}--\ref{fig:respuesta_servo}.
+
+\lstinputlisting[language=Matlab, caption={Script de post-procesamiento: respuestas de controlador, observador y servosistema}, label={lst:post_process_m}]{simulations/post_process.m}
+
+
+\end{document}
+

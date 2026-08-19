@@ -1,0 +1,515 @@
+\documentclass[conference]{IEEEtran}
+\usepackage[spanish]{babel}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{siunitx}
+\usepackage{float}
+\usepackage{placeins}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{grffile}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric,arrows.meta,positioning,calc,fit,backgrounds}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{etoolbox}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{gray}\itshape,
+  stringstyle=\color{teal},
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  xleftmargin=1.5em,
+  captionpos=b
+}
+
+% Placeholder visual para figuras aun no disponibles (no requiere archivo externo).
+% Uso: \imgplaceholder{<alto>}{<descripcion de la imagen a insertar>}
+\newcommand{\imgplaceholder}[2]{%
+  \fbox{\begin{minipage}[c][#1][c]{\dimexpr\linewidth-2\fboxsep-2\fboxrule}%
+    \centering\itshape\small #2
+  \end{minipage}}%
+}
+
+% Figura "inteligente" para evidencia real (capturas de TIA Portal/WinCC/PLCSIM).
+% Si el archivo images/#1 existe, lo inserta; si no, muestra un placeholder
+% con el nombre esperado, de forma que el documento compile en ambos casos.
+% Uso: \imgslot{<archivo en images/>}{<alto placeholder>}{<caption>}{<label>}
+\newcommand{\imgslot}[4]{%
+  \begin{figure}[H]
+    \centering
+    \IfFileExists{images/#1}{%
+      \includegraphics[width=\linewidth]{images/#1}%
+    }{%
+      \imgplaceholder{#2}{Pendiente de captura: \texttt{images/#1} --- #3}%
+    }%
+    \caption{#3}
+    \label{#4}
+  \end{figure}%
+}
+
+\begin{document}
+
+\title{Control Automático y Secuencial de una Estación de Bombeo de Cuatro Bombas Centrífugas Mediante PLC Siemens S7-1500}
+
+\author{
+    \IEEEauthorblockN{
+         Daniel García Araque
+    }
+    \IEEEauthorblockA{Ingeniería en Mecatrónica\\
+    Universidad Militar Nueva Granada\\
+    Cajicá, Colombia\\
+    Código: 7004185\\
+    est.daniel.garciaa@unimilitar.edu.co
+  }
+}
+
+\maketitle
+
+\begin{abstract}
+Este documento presenta el diseño e implementación del sistema de control de una estación de bombeo compuesta por cuatro bombas centrífugas (B1--B4) conectadas en paralelo, destinada a suministrar agua a una red de consumo con demanda variable. A partir de la señal 4--20~mA del transmisor de caudal FT-01, se desarrolló una estrategia de control por PLC Siemens S7-1500 (TIA Portal) que determina el número de bombas requeridas según el caudal, incorporando histéresis y temporización (arranque a 10~s, parada a 30~s) para evitar arranques y paradas frecuentes. Se implementó un algoritmo de rotación tipo \emph{round-robin} para equilibrar las horas de funcionamiento entre bombas, así como un algoritmo de exclusión automática de bombas en falla con bloqueo hasta rearme manual. El sistema se estructuró en dos lenguajes IEC~61131-3: Ladder (LAD) para los enclavamientos de seguridad, selección de modo y lógica combinacional, y Diagrama Secuencial de Funciones (SFC/GRAPH) para la secuencia de escalonamiento y rotación de bombas. Se documentan el análisis de entradas/salidas, el diagrama P\&ID simplificado, la arquitectura de bloques del PLC (OB/FB/FC/DB) y la validación lógica del programa frente a los escenarios de operación, falla y seguridad especificados.
+
+\vspace{1em}
+\noindent \textbf{\textit{Palabras clave---}} Estación de bombeo, PLC Siemens S7-1500, TIA Portal, control secuencial, SFC/GRAPH, Ladder, histéresis, rotación de bombas, P\&ID, seguridad industrial.
+\end{abstract}
+
+\section{Introducción}
+
+Las estaciones de bombeo que alimentan redes de consumo con demanda variable requieren estrategias de control capaces de ajustar dinámicamente el número de equipos en servicio, sin incurrir en maniobras excesivas de arranque/parada que degraden la vida útil de motores y arrancadores \cite{siemens_s71500}. El control por autómata programable (PLC) permite integrar en un mismo sistema la medición de proceso (caudal, nivel), la lógica de decisión (número de bombas, selección y rotación) y la gestión de condiciones de seguridad (parada de emergencia, bajo nivel, protección térmica), condiciones todas exigidas por la norma de programación industrial IEC~61131-3 \cite{iec61131_3}.
+
+Este trabajo aborda el diseño completo del sistema de control de una estación de bombeo de cuatro bombas centrífugas en paralelo (B1--B4), sobre plataforma Siemens S7-1500/TIA Portal. El diseño combina dos lenguajes normalizados: Ladder (LAD), para la lógica combinacional y de enclavamiento (arranque/paro, modos manual/automático, seguridad), y Diagrama Secuencial de Funciones (SFC), también conocido en el entorno Siemens como S7-GRAPH, para la secuencia de escalonamiento de bombas en función del caudal medido por el transmisor FT-01 (4--20~mA).
+
+El documento se organiza siguiendo las tres actividades del taller: (1) análisis del proceso e identificación de entradas, salidas, variables analógicas, actuadores, sensores y condiciones de seguridad; (2) diagrama P\&ID simplificado de la estación; y (3) desarrollo de la secuencia de control en los lenguajes seleccionados, incluyendo la arquitectura de bloques del PLC, la estrategia de histéresis/temporización, el algoritmo de rotación y la gestión de fallas.
+
+\section{Objetivos}
+
+Diseñar e implementar el sistema de control de una estación de bombeo de agua de cuatro bombas centrífugas en paralelo mediante PLC industrial, junto con su diagrama P\&ID.
+
+\subsection*{Objetivos Específicos}
+\begin{itemize}
+    \item Identificar entradas, salidas, variables analógicas, actuadores, sensores y condiciones de seguridad del proceso.
+    \item Diseñar el diagrama P\&ID simplificado de la estación de bombeo.
+    \item Programar el arranque y parada automática de las bombas según la demanda de caudal.
+    \item Implementar histéresis y temporización que eviten arranques y paradas frecuentes.
+    \item Implementar un algoritmo de rotación que distribuya uniformemente las horas de funcionamiento entre las cuatro bombas.
+    \item Implementar la exclusión automática de bombas en falla y su rearme controlado.
+    \item Gestionar las condiciones de seguridad (bajo nivel, parada de emergencia) y las alarmas del sistema.
+    \item Permitir la operación en modo manual y automático, con visualización de variables mediante HMI.
+\end{itemize}
+
+\section{Marco Teórico}
+
+\subsection*{Control de bombas en paralelo con demanda variable}
+En una batería de bombas centrífugas idénticas conectadas en paralelo a un colector común, el caudal total suministrado es aproximadamente la suma de los caudales individuales de las unidades en servicio, mientras la curva del sistema lo permita. El control de \emph{cascada} o \emph{staging} consiste en incrementar o decrementar el número de bombas activas por tramos de caudal, de forma que el punto de operación se mantenga dentro del rango eficiente de cada unidad \cite{siemens_s71500}.
+
+\subsection*{Histéresis y temporización anti-cicleo}
+Si el número de bombas activas se determinara por comparación directa entre el caudal instantáneo y los umbrales de la Tabla~\ref{tab:umbrales}, pequeñas oscilaciones del caudal alrededor de un umbral producirían arranques y paradas repetitivos (\emph{chattering}). Para evitarlo se combinan dos mecanismos: (1)~\textbf{histéresis}, empleando un umbral de arranque superior al umbral de parada para una misma transición de bomba, y (2)~\textbf{temporización}, exigiendo que la condición de cambio de estado permanezca estable durante un tiempo mínimo ($T_{arr}=10\,\si{s}$ para arrancar una bomba adicional, $T_{par}=30\,\si{s}$ para detenerla) antes de ejecutar la acción \cite{iec61131_3}.
+
+\subsection*{Rotación de bombas (round-robin)}
+Para equilibrar el desgaste y las horas de funcionamiento acumuladas, la bomba líder (primera en arrancar) cambia entre ciclos de operación completos, desplazando cíclicamente el orden de prioridad de arranque: $B1{\to}B2{\to}B3{\to}B4$ en un ciclo, $B2{\to}B3{\to}B4{\to}B1$ en el siguiente, y así sucesivamente. La bomba con mayor prioridad de \emph{parada} es, de forma simétrica, la primera bomba que arrancó dentro del grupo actualmente en servicio (política FIFO), de modo que ninguna unidad permanece siempre como última en detenerse.
+
+\subsection*{Diagrama Secuencial de Funciones (SFC/GRAPH)}
+El SFC (IEC~61131-3), implementado en TIA Portal como S7-GRAPH, describe el proceso como una sucesión de \emph{pasos} (steps) con acciones asociadas y \emph{transiciones} habilitadas por condiciones lógicas. Es el lenguaje natural para representar el escalonamiento de bombas, ya que cada nivel de caudal corresponde a un paso con un número fijo de bombas activas, y el avance/retroceso entre pasos queda condicionado por los temporizadores de histéresis descritos arriba.
+
+\section{Actividad 1: Análisis del Proceso}
+\label{sec:actividad1}
+
+A continuación se listan las señales de campo identificadas para el sistema, asumiendo arrancadores directos (o variadores en modo todo/nada) por bomba y un PLC Siemens S7-1500 con módulos de E/S digitales (SM~1221/1222) y un módulo de entradas analógicas (SM~1231, 4--20~mA).
+
+\subsection{Entradas digitales}
+\begin{table}[H]
+\centering
+\caption{Entradas digitales (DI)}
+\label{tab:di}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|l|l|p{3.6cm}|}
+\hline
+\textbf{Tag} & \textbf{Dirección} & \textbf{Descripción} \\
+\hline
+I\_START & \%I0.0 & Botón pulsador Marcha (NA) \\ \hline
+I\_STOP & \%I0.1 & Botón pulsador Paro (NC, activo en bajo) \\ \hline
+I\_ESTOP & \%I0.2 & Seta de parada de emergencia (circuito de seguridad, NC) \\ \hline
+I\_MODE\_AUTO & \%I0.3 & Selector Manual/Automático (1 = Auto) \\ \hline
+I\_RESET & \%I0.4 & Botón de rearme de fallas \\ \hline
+I\_LSL\_TANQUE & \%I0.5 & Interruptor de bajo nivel del tanque de succión (NC, fail-safe) \\ \hline
+I\_B1\_FALLA..I\_B4\_FALLA & \%I1.0--\%I1.3 & Contacto de protección térmica / falla de arrancador por bomba \\ \hline
+I\_B1\_MARCHA..I\_B4\_MARCHA & \%I1.4--\%I1.7 & Contacto auxiliar de contactor (confirmación de marcha) por bomba \\ \hline
+I\_B1\_MAN..I\_B4\_MAN & \%I2.0--\%I2.3 & Pulsador de marcha manual por bomba (solo activo en modo Manual) \\ \hline
+\end{tabular}
+\end{table}
+
+\subsection{Variables analógicas}
+\begin{table}[H]
+\centering
+\caption{Entradas analógicas (AI)}
+\label{tab:ai}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Tag} & \textbf{Dirección} & \textbf{Rango} \\
+\hline
+AI\_FT01 & \%IW64 & 4--20~mA $\rightarrow$ 0--200~\si{m^3/h} \\
+\hline
+\end{tabular}
+\end{table}
+
+El escalado lineal de la señal cruda (0--27648 en formato S7 para 4--20~mA) a unidades de ingeniería se realiza mediante:
+\begin{equation}
+Q_{FT01} = \frac{AI\_FT01 - 0}{27648} \times 200 \;\;[\si{m^3/h}]
+\label{eq:escalado}
+\end{equation}
+
+\subsection{Salidas digitales}
+\begin{table}[H]
+\centering
+\caption{Salidas digitales (DQ)}
+\label{tab:dq}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|l|l|p{3.6cm}|}
+\hline
+\textbf{Tag} & \textbf{Dirección} & \textbf{Descripción} \\
+\hline
+Q\_B1..Q\_B4 & \%Q0.0--\%Q0.3 & Comando de arranque de contactor por bomba \\ \hline
+Q\_ALARMA & \%Q0.4 & Baliza/bocina de alarma general \\ \hline
+Q\_LISTO & \%Q0.5 & Indicador ``Sistema en Automático, listo'' \\ \hline
+\end{tabular}
+\end{table}
+
+\subsection{Actuadores}
+Cuatro contactores/arrancadores (uno por bomba) que energizan los motores de las bombas centrífugas B1--B4; baliza luminosa y bocina de alarma.
+
+\subsection{Sensores}
+Transmisor de caudal FT-01 (4--20~mA); interruptor de nivel bajo LSL en el tanque de succión; relés térmicos/protección de motor por bomba (señal de falla); contactos auxiliares de los contactores (confirmación de marcha real).
+
+\subsection{Condiciones de seguridad}
+\begin{itemize}
+    \item \textbf{Parada de emergencia:} corta la alimentación de los contactores mediante el circuito de seguridad cableado (hardwired) y adicionalmente es leída por el PLC para registrar el evento; el sistema no rearranca automáticamente al liberar la seta, requiere \texttt{I\_RESET} y nueva pulsación de \texttt{I\_START}.
+    \item \textbf{Bajo nivel de tanque:} detiene todas las bombas, activa alarma y bloquea nuevos arranques hasta que el nivel se normalice (protección contra funcionamiento en seco).
+    \item \textbf{Falla térmica por bomba:} detiene la bomba afectada, la marca como NO DISPONIBLE, activa alarma y la excluye del algoritmo de selección hasta rearme manual y verificación de condiciones.
+    \item \textbf{Bloqueo de rearranque automático tras emergencia:} el sistema permanece detenido y en alarma latched hasta acción manual explícita del operador.
+\end{itemize}
+
+\section{Actividad 2: Diagrama P\&ID Simplificado}
+\label{sec:pid}
+
+La Figura~\ref{fig:pid} presenta el diagrama de tubería e instrumentación (P\&ID) simplificado de la estación, siguiendo la simbología ISA~S5.1 \cite{isa_s51}: tanque de succión con interruptor de bajo nivel (LSL-01), cuatro ramales de bombeo en paralelo (B1--B4) cada uno con válvula de retención (check) hacia el colector de descarga, transmisor de caudal FT-01 en la línea común de descarga hacia la red de consumo, y lazo de control FIC-01 (implementado en el PLC) que recibe la señal de FT-01 y comanda las bombas.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    font=\scriptsize,
+    tank/.style={draw, thick, minimum width=1.4cm, minimum height=2.0cm},
+    pump/.style={draw, thick, circle, minimum size=0.5cm},
+    valve/.style={draw, thick, diamond, minimum size=0.3cm, inner sep=0pt},
+    inst/.style={draw, thick, circle, minimum size=0.5cm},
+    pipe/.style={thick}
+]
+% Tanque de succion y sensor de nivel bajo
+\node[tank] (tank) at (0,0) {};
+\node[above] at (tank.north) {Tanque};
+\node[inst] (lsl) at (-1.0,-0.5) {LSL01};
+\draw[pipe] (lsl.east) -- (-0.55,-0.5) -- (-0.55,0) -- (tank.west);
+
+% Colector de succion (linea vertical)
+\coordinate (hdrTop) at (0.8,1.2);
+\coordinate (hdrBot) at (0.8,-1.2);
+\draw[pipe] (tank.east) -- (0.8,0);
+\draw[pipe] (hdrTop) -- (hdrBot);
+
+% 4 bombas en paralelo: succion -> bomba -> valvula check -> colector descarga
+\coordinate (dCollTop) at (4.2,1.2);
+\coordinate (dCollBot) at (4.2,-1.2);
+\draw[pipe] (dCollTop) -- (dCollBot);
+\foreach \i/\y in {1/1.2, 2/0.4, 3/-0.4, 4/-1.2} {
+  \draw[pipe] (0.8,\y) -- (1.7,\y);
+  \node[pump] (p\i) at (2.1,\y) {B\i};
+  \draw[pipe] (p\i.east) -- (2.9,\y);
+  \node[valve] (v\i) at (3.2,\y) {};
+  \draw[pipe] (v\i.east) -- (4.2,\y);
+}
+
+% Colector de descarga -> FT-01 -> red de consumo
+\draw[pipe] (4.2,0) -- (5.0,0);
+\node[inst] (ft01) at (5.6,0) {FT01};
+\draw[pipe] (4.2,0) -- (ft01.west);
+\draw[pipe] (ft01.east) -- (6.4,0);
+\node[right] at (6.4,0) {Red};
+
+% Lazo de control (FIC-01 en el PLC)
+\node[inst, dashed] (fic) at (5.6,1.5) {FIC01};
+\draw[dashed,thick,-{Stealth[length=2mm]}] (ft01.north) -- (fic.south);
+\draw[dashed,thick,-{Stealth[length=2mm]}] (fic.west) -- (2.1,1.5) -- (2.1,1.45);
+\node[align=center, font=\tiny] at (2.1,1.75) {Señal a PLC\\(comando B1--B4)};
+\end{tikzpicture}
+\caption{P\&ID simplificado de la estación de bombeo: tanque de succión con LSL-01, cuatro bombas B1--B4 en paralelo con válvulas de retención, colector de descarga, transmisor de caudal FT-01 y lazo de control FIC-01 (PLC).}
+\label{fig:pid}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\caption{Identificación de instrumentos (tags P\&ID)}
+\label{tab:tags}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|l|p{5.6cm}|}
+\hline
+\textbf{Tag} & \textbf{Descripción} \\
+\hline
+FT-01 & Transmisor de caudal, línea de descarga común, 4--20~mA \\ \hline
+FIC-01 & Controlador de caudal (lógica de staging, implementado en PLC) \\ \hline
+LSL-01 & Interruptor de nivel bajo, tanque de succión \\ \hline
+B1--B4 & Bombas centrífugas en paralelo \\ \hline
+XV-1..XV-4 & Válvulas de retención (check) por ramal de bomba \\ \hline
+\end{tabular}
+\end{table}
+
+\section{Actividad 3: Secuencia de Control y Programación del PLC}
+\label{sec:plc}
+
+\subsection{Arquitectura de bloques (S7-1500)}
+
+La Tabla~\ref{tab:blocks} resume la estructura de programa propuesta en TIA Portal, organizada según la convención Siemens de bloques de organización (OB), funciones (FC), bloques de función (FB) y bloques de datos (DB).
+
+\begin{table}[H]
+\centering
+\caption{Estructura de bloques del programa}
+\label{tab:blocks}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|l|p{5.6cm}|}
+\hline
+\textbf{Bloque} & \textbf{Función} \\
+\hline
+OB1 (Main) & Ciclo principal; llama a FB1 con su DB de instancia \\ \hline
+OB100 (Startup) & Arranque en caliente/frío: inicializa índice de rotación y estado de bombas \\ \hline
+OB121/OB82 & Manejo de errores de programa y de módulo de E/S (diagnóstico) \\ \hline
+FB1 (FB\_EstacionBombeo) & Lógica principal: modos, enclavamientos LAD y llamado al SFC de escalonamiento \\ \hline
+FC1 (FC\_EscaladoAnalogico) & Escalado de \texttt{AI\_FT01} a \si{m^3/h} (Ec.~\ref{eq:escalado}) \\ \hline
+FC2 (FC\_GestionFallas) & Detección de falla térmica, marcado NO DISPONIBLE, alarma \\ \hline
+FC3 (FC\_SeleccionRotacion) & Algoritmo round-robin de selección de bomba líder y de parada \\ \hline
+SFC1 / Graph\_Escalonamiento & Secuencia de pasos S0--S4 (número de bombas activas) con histéresis \\ \hline
+DB1 (DB\_EstacionBombeo) & DB de instancia de FB1 \\ \hline
+DB2 (DB\_Bombas) & UDT \texttt{typ\_Bomba} $\times$ 4 (Disponible, Marcha, Falla, HorasFunc, Prioridad) \\ \hline
+DB3 (DB\_Alarmas) & Registro de eventos de falla y emergencia (histórico) \\ \hline
+\end{tabular}
+\end{table}
+
+\imgslot{01_project_tree.png}{3.2cm}{Árbol del proyecto en TIA Portal: bloques OB/FB/FC/DB de la estación de bombeo.}{fig:project_tree}
+
+\subsection{Lógica de enclavamientos y modos (LAD)}
+
+Se presenta a continuación la lógica combinacional en Ladder, expresada en notación IEC~61131-3 (contacto NA \texttt{--| |--}, contacto NC \texttt{--|/|--}, bobina \texttt{--( )--}, bobina SET \texttt{--(S)--}, bobina RESET \texttt{--(R)--}).
+
+\begin{lstlisting}[caption={Network 1: Enclavamiento general Marcha/Paro (modo Automático)}, label={lst:lad1}]
+Network 1: Sello de marcha del sistema
+  I_START   I_STOP   I_ESTOP   M_LISTO   M_SIST_RUN
+ --| |--------|/|-------| |-------| |-------( )------
+     |                                          |
+  M_SIST_RUN                                    |
+ -----| |----------------------------------------
+\end{lstlisting}
+
+\begin{lstlisting}[caption={Network 2: Interlocks de seguridad (bajo nivel y emergencia)}, label={lst:lad2}]
+Network 2: Permisivo de arranque (M_LISTO)
+ I_MODE_AUTO  I_LSL_TANQUE  I_ESTOP  M_FALLA_GRAL   M_LISTO
+--| |------------| |-----------| |--------|/|---------( )---
+
+Network 3: Enclavamiento de falla general (SR)
+ M_FALLA_B1..B4 (OR)                       M_FALLA_GRAL
+------------------------------------------------(S)-----
+ I_RESET     M_FALLA_B1..B4=0 (AND)        M_FALLA_GRAL
+----| |------------| |---------------------------(R)-----
+\end{lstlisting}
+
+\imgslot{02_lad_networks_1_3.png}{3.2cm}{Vista del editor LAD en TIA Portal: Networks 1--3 (enclavamiento general y permisivos de seguridad).}{fig:lad_1_3}
+
+\begin{lstlisting}[caption={Network 4: Selector de modo y comando individual de bomba (ejemplo B1)}, label={lst:lad3}]
+Network 4: Comando de salida Q_B1 (combina Auto/Manual)
+ I_MODE_AUTO   SFC_CMD_B1                          Q_B1
+----| |-----------| |------------------------------( )---
+     |
+ I_MODE_AUTO(/)  I_B1_MAN  I_B1_FALLA(/)  M_SIST_RUN
+----|/|-------------| |---------| |-----------| |-------|
+                                                          |
+(misma bobina Q_B1, rama OR con la anterior) -------------
+\end{lstlisting}
+
+\imgslot{03_lad_network_4.png}{3.2cm}{Vista del editor LAD en TIA Portal: Network 4 replicada para B1--B4 (comando de salida por bomba).}{fig:lad_4}
+
+Las redes anteriores se replican para B2, B3 y B4 cambiando únicamente el operando de bomba. \texttt{SFC\_CMD\_Bx} corresponde al bit de comando que la secuencia SFC (Sección~\ref{sec:sfc}) activa para la bomba seleccionada por el algoritmo de rotación.
+
+\subsection{Secuencia de escalonamiento (SFC/GRAPH)}
+\label{sec:sfc}
+
+La Figura~\ref{fig:sfc} representa la secuencia de escalonamiento como un SFC de cinco pasos (S0: ninguna bomba, S1--S4: una a cuatro bombas activas). Las transiciones de avance exigen que el caudal supere el umbral superior de la Tabla~\ref{tab:umbrales} durante $T_{arr}=10\,\si{s}$ (temporizador TON); las transiciones de retroceso exigen que el caudal permanezca bajo el umbral inferior durante $T_{par}=30\,\si{s}$ (temporizador TON independiente, reiniciado si el caudal vuelve a superar el umbral antes de cumplirse).
+
+\begin{table}[H]
+\centering
+\caption{Umbrales de caudal por número de bombas}
+\label{tab:umbrales}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{Paso} & \textbf{Bombas activas} & \textbf{Rango de caudal} \\
+\hline
+S0 & 0 & $Q < 0$ (o \texttt{M\_SIST\_RUN}=0) \\ \hline
+S1 & 1 & 0 -- 50~\si{m^3/h} \\ \hline
+S2 & 2 & 50 -- 100~\si{m^3/h} \\ \hline
+S3 & 3 & 100 -- 150~\si{m^3/h} \\ \hline
+S4 & 4 & $>150$~\si{m^3/h} \\ \hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    font=\scriptsize,
+    step/.style={draw, thick, minimum width=2.2cm, minimum height=0.55cm},
+    initstep/.style={step, double, double distance=1.5pt},
+    trans/.style={draw, thick, minimum width=0.6cm},
+    yscale=0.85
+]
+\node[initstep] (s0) at (0,5) {S0: 0 bombas};
+\node[trans] (t01) at (0,4.55) {};
+\node[step] (s1) at (0,4) {S1: B\_líder ON};
+\node[trans] (t12) at (0,3.55) {};
+\node[step] (s2) at (0,3) {S2: 2 bombas ON};
+\node[trans] (t23) at (0,2.55) {};
+\node[step] (s3) at (0,2) {S3: 3 bombas ON};
+\node[trans] (t34) at (0,1.55) {};
+\node[step] (s4) at (0,1) {S4: 4 bombas ON};
+
+\draw[thick] (s0) -- (t01);
+\draw[thick] (t01) -- (s1);
+\draw[thick] (s1) -- (t12);
+\draw[thick] (t12) -- (s2);
+\draw[thick] (s2) -- (t23);
+\draw[thick] (t23) -- (s3);
+\draw[thick] (s3) -- (t34);
+\draw[thick] (t34) -- (s4);
+
+\node[right] at ($(t01.east)+(0.15,0)$) {\scriptsize M\_LISTO $\wedge$ I\_START};
+\node[right] at ($(t12.east)+(0.15,0)$) {\scriptsize $Q{>}50$ TON 10s};
+\node[right] at ($(t23.east)+(0.15,0)$) {\scriptsize $Q{>}100$ TON 10s};
+\node[right] at ($(t34.east)+(0.15,0)$) {\scriptsize $Q{>}150$ TON 10s};
+
+% Retorno (retroceso) - lineas punteadas a la izquierda
+\draw[thick,dashed,-{Stealth[length=2mm]}] (s4.west) -- ++(-1.3,0) -- ($(t34.west)+(-1.3,0)$) -- (t34.west);
+\node[left, align=right] at (-1.35,1.3) {\scriptsize $Q{<}150$\\TON 30s};
+\draw[thick,dashed,-{Stealth[length=2mm]}] (s3.west) -- ++(-1.3,0) -- ($(t23.west)+(-1.3,0)$) -- (t23.west);
+\node[left, align=right] at (-1.35,2.3) {\scriptsize $Q{<}100$\\TON 30s};
+\draw[thick,dashed,-{Stealth[length=2mm]}] (s2.west) -- ++(-1.3,0) -- ($(t12.west)+(-1.3,0)$) -- (t12.west);
+\node[left, align=right] at (-1.35,3.3) {\scriptsize $Q{<}50$\\TON 30s};
+\draw[thick,dashed,-{Stealth[length=2mm]}] (s1.west) -- ++(-1.3,0) -- ($(t01.west)+(-1.3,0)$) -- (t01.west);
+\node[left, align=right] at (-1.35,4.3) {\scriptsize I\_STOP $\vee$\\ M\_FALLA\_GRAL};
+\end{tikzpicture}
+\caption{SFC de escalonamiento: pasos S0--S4 (número de bombas activas) con transiciones de avance temporizadas a 10~s y de retroceso a 30~s.}
+\label{fig:sfc}
+\end{figure}
+
+\imgslot{04_graph_sequence.png}{3.2cm}{Vista del editor S7-GRAPH en TIA Portal: secuencia de escalonamiento S0--S4 como construida.}{fig:graph_asbuilt}
+
+Cada paso $S_n$ ($n\geq1$) activa, como acción asociada, exactamente $n$ bits \texttt{SFC\_CMD\_Bx}, seleccionados por el algoritmo de rotación descrito a continuación, y no directamente por número físico de bomba.
+
+\subsection{Algoritmo de rotación round-robin}
+
+El algoritmo mantiene un puntero de rotación \texttt{idx\_lider} $\in\{0,1,2,3\}$, que se incrementa (módulo 4) cada vez que el sistema retorna completamente al paso S0 tras haber operado. El orden de arranque para un ciclo dado es la secuencia de bombas \emph{disponibles} comenzando en \texttt{idx\_lider} y avanzando circularmente:
+
+\begin{equation}
+\text{orden}[k] = \text{Bombas}\big[(\text{idx\_lider} + k) \bmod 4\big],\quad k=0..3
+\label{eq:rotacion}
+\end{equation}
+
+Al entrar al paso $S_n$, se activan las primeras $n$ bombas de \texttt{orden} que estén marcadas como \texttt{Disponible=TRUE}, saltando las que estén en falla. La bomba con mayor prioridad de parada al retroceder de $S_n$ a $S_{n-1}$ es la última bomba activada dentro de \texttt{orden} (política LIFO respecto al arranque, equivalente a FIFO respecto a horas acumuladas en el ciclo), de modo que la bomba líder del ciclo —la que más tiempo lleva encendida— es la última en detenerse solo dentro de ese ciclo, pero al iniciar el siguiente ciclo deja de ser líder por el incremento de \texttt{idx\_lider}, evitando así que una misma unidad acumule sistemáticamente más horas que las demás.
+
+\begin{table}[H]
+\centering
+\caption{Ejemplo de rotación en ciclos sucesivos (todas disponibles)}
+\label{tab:rotacion_ej}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{Ciclo} & \textbf{idx\_lider} & \textbf{Orden de arranque} \\
+\hline
+1 & 0 & B1 $\to$ B2 $\to$ B3 $\to$ B4 \\ \hline
+2 & 1 & B2 $\to$ B3 $\to$ B4 $\to$ B1 \\ \hline
+3 & 2 & B3 $\to$ B4 $\to$ B1 $\to$ B2 \\ \hline
+4 & 3 & B4 $\to$ B1 $\to$ B2 $\to$ B3 \\ \hline
+\end{tabular}
+\end{table}
+
+\imgslot{05_watch_rotacion.png}{3.2cm}{Tabla de observación (watch table) en línea: \texttt{idx\_lider} y vector \texttt{orden[]} del DB2 durante la operación.}{fig:watch_rotacion}
+
+\subsection{Gestión de fallas}
+
+Al activarse \texttt{I\_Bx\_FALLA}: (1)~se ejecuta un RESET inmediato sobre \texttt{SFC\_CMD\_Bx} (Network 4, Sección anterior) deteniendo la bomba; (2)~se marca \texttt{Bombas[x].Disponible := FALSE} en el DB2; (3)~se activa \texttt{M\_FALLA\_GRAL} (Network 3, enclavamiento SR) y \texttt{Q\_ALARMA}; (4)~el vector \texttt{orden} de la Ec.~\ref{eq:rotacion} excluye automáticamente la bomba marcada como no disponible en la siguiente evaluación del algoritmo, de forma que si, por ejemplo, B3 está en falla, únicamente B1, B2 y B4 son elegibles. La bomba solo vuelve a estar disponible tras \texttt{I\_RESET} y verificación de que \texttt{I\_Bx\_FALLA}=0 (contacto térmico ya rearmado), conforme al enclavamiento SR de la Network 3.
+
+\subsection{Modo manual}
+En modo manual (\texttt{I\_MODE\_AUTO}=0), el SFC de escalonamiento permanece inactivo (forzado a S0) y el operador comanda cada bomba individualmente mediante \texttt{I\_Bx\_MAN}, sujeto siempre a los mismos enclavamientos de seguridad (bajo nivel, emergencia, falla) de la Network 2/3, que no se anulan en ningún modo.
+
+\section{Validación Lógica del Programa}
+\label{sec:validacion}
+
+Dado que la validación se realiza sobre el diseño lógico (no hay planta física disponible en este taller), la Tabla~\ref{tab:validacion} traza la respuesta esperada del programa ante los escenarios especificados, verificando su consistencia con las Secciones~\ref{sec:plc}.
+
+\begin{table*}[t]
+\centering
+\caption{Trazabilidad de escenarios de validación}
+\label{tab:validacion}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|p{2.6cm}|p{6.5cm}|p{7.8cm}|}
+\hline
+\textbf{Escenario} & \textbf{Entrada} & \textbf{Respuesta esperada del PLC} \\
+\hline
+Arranque normal & \texttt{I\_MODE\_AUTO}=1, \texttt{I\_START} pulsado, sin fallas, nivel OK & \texttt{M\_LISTO}=1, SFC avanza S0$\to$S1 activando la bomba líder del ciclo actual \\ \hline
+Incremento de demanda & $Q$ sube de 40 a 120~\si{m^3/h} y se sostiene $>150\,\si{m^3/h}$ durante $\geq10$~s & SFC avanza S1$\to$S2$\to$S3 (según Tabla~\ref{tab:umbrales}); en $Q>150$ sostenido, avanza a S4 activando la 4ª bomba disponible del vector \texttt{orden} \\ \hline
+Disminución de demanda & $Q$ cae y permanece $<100\,\si{m^3/h}$ durante $\geq30$~s & SFC retrocede S3$\to$S2 deteniendo la última bomba arrancada del ciclo (Sección 7.4); si $Q$ vuelve a subir antes de los 30~s, el temporizador de retroceso se reinicia y no hay parada \\ \hline
+Falla de B3 con demanda de 3 bombas & \texttt{I\_B3\_FALLA}=1, sistema en S3 & B3 se detiene de inmediato, \texttt{Disponible[B3]}=FALSE, \texttt{M\_FALLA\_GRAL}=1, \texttt{Q\_ALARMA}=1; el algoritmo selecciona B1, B2 y B4 (excluye B3) para mantener 3 bombas activas \\ \hline
+Rearme tras falla & \texttt{I\_RESET} pulsado con \texttt{I\_B3\_FALLA}=0 & \texttt{M\_FALLA\_GRAL}$\to$0 (si no hay otras fallas activas), \texttt{Disponible[B3]} vuelve a TRUE y B3 reingresa al vector \texttt{orden} en la posición que le corresponda por rotación \\ \hline
+Bajo nivel de tanque & \texttt{I\_LSL\_TANQUE}=0 (nivel bajo) & \texttt{M\_LISTO}$\to$0 inmediatamente, SFC fuerza retorno a S0 deteniendo todas las bombas, \texttt{Q\_ALARMA}=1, bloqueo de nuevos arranques hasta \texttt{I\_LSL\_TANQUE}=1 \\ \hline
+Parada de emergencia & \texttt{I\_ESTOP} activada & Corte inmediato de todos los contactores por el circuito de seguridad cableado; \texttt{M\_SIST\_RUN}$\to$0 (Network 1); el sistema no rearranca automáticamente al liberar la seta: requiere \texttt{I\_RESET} y nueva pulsación de \texttt{I\_START} \\ \hline
+\end{tabular}
+\end{table*}
+
+\imgslot{06_plcsim_trend.png}{3.2cm}{Tendencia PLCSIM: caudal $Q_{FT01}$, pasos S0--S4 y estados de bomba durante los escenarios de la Tabla~\ref{tab:validacion}.}{fig:plcsim_trend}
+
+\section{Interfaz Hombre-Máquina (HMI)}
+
+Se contempla una pantalla de visualización con: estado individual de cada bomba (Marcha/Paro/Falla/No disponible), caudal instantáneo $Q_{FT01}$ y su tendencia, número de bombas activas y paso actual del SFC, bomba líder vigente del ciclo de rotación, estado de nivel del tanque, y botones soft de Start/Stop/Reset y selección Manual/Automático. La Figura~\ref{fig:hmi} referencia el espacio destinado a la captura de pantalla real de la pantalla de proceso, una vez desarrollada en TIA Portal/WinCC.
+
+\imgslot{07_hmi_runtime.png}{4cm}{Pantalla de proceso HMI: estado de B1--B4, caudal FT-01, paso SFC activo, alarmas y controles Start/Stop/Reset/Manual-Auto.}{fig:hmi}
+
+\section{Conclusiones}
+
+\begin{itemize}
+    \item La separación en dos lenguajes IEC~61131-3 —Ladder para enclavamientos combinacionales y SFC/GRAPH para la secuencia de escalonamiento— permitió aislar la lógica de seguridad (siempre activa, independiente de modo) de la lógica de proceso (dependiente del paso SFC vigente), simplificando la trazabilidad del programa.
+    \item La combinación de histéresis en los umbrales de caudal con temporizadores independientes de arranque (10~s) y parada (30~s) evita el cicleo de bombas ante fluctuaciones normales de demanda, sin introducir retrasos excesivos en la respuesta del sistema ante cambios sostenidos.
+    \item El algoritmo de rotación basado en un puntero circular (\texttt{idx\_lider}) desacopla la posición física de la bomba (B1--B4) de su prioridad de arranque, logrando distribuir las horas de funcionamiento entre las cuatro unidades a lo largo de ciclos sucesivos.
+    \item La exclusión de bombas en falla mediante un enclavamiento SR y su reintegro solo tras \texttt{RESET} manual garantiza que ninguna bomba dañada sea comandada automáticamente, cumpliendo el requisito de disponibilidad condicionada del taller.
+    \item Los enclavamientos de seguridad (bajo nivel, parada de emergencia) se diseñaron con prioridad absoluta sobre la lógica de proceso y sin rearranque automático, en línea con buenas prácticas de sistemas instrumentados de seguridad.
+\end{itemize}
+
+\bibliographystyle{IEEEtran}
+\begin{thebibliography}{9}
+
+\bibitem{siemens_s71500}
+Siemens AG, \textit{S7-1500, ET 200MP -- System Manual}, Siemens AG, 2023.
+
+\bibitem{iec61131_3}
+International Electrotechnical Commission, \textit{IEC 61131-3: Programmable Controllers -- Part 3: Programming Languages}, 3rd ed., IEC, 2013.
+
+\bibitem{isa_s51}
+International Society of Automation, \textit{ANSI/ISA-5.1-2009: Instrumentation Symbols and Identification}, ISA, 2009.
+
+\end{thebibliography}
+
+\section*{Anexo: Listado Estructurado de la Lógica de Control}
+
+El listado siguiente resume, en notación estructurada equivalente (no gráfica), la lógica completa desarrollada en LAD y SFC de las Secciones~\ref{sec:plc}, para referencia y trazabilidad de todas las variables internas empleadas. Se documenta como texto porque LAD y SFC son lenguajes gráficos y su código fuente nativo (\texttt{.awl}/\texttt{.graph}) no es representable como texto plano; el archivo de proyecto TIA Portal completo se referencia como entregable adicional del taller. Las capturas reales del entorno (editor LAD, S7-GRAPH, tabla de observación, tendencias PLCSIM y pantalla HMI) se insertan automáticamente en las Secciones~\ref{sec:plc}--\ref{sec:validacion} en cuanto se coloquen en la carpeta \texttt{images/} con el nombre indicado en cada figura; mientras tanto se muestra un recuadro de espacio reservado.
+
+\lstinputlisting[caption={Equivalente estructurado consolidado de la lógica LAD + SFC}, label={lst:consolidado}]{simulations/logica_consolidada.txt}
+
+\end{document}

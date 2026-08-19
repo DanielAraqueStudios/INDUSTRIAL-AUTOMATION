@@ -1,0 +1,10 @@
+# Ruflo local secrets and runtime data
+.env
+.env.local
+.env.*.local
+
+# Claude Code / Ruflo local tooling (agents, hooks, MCP config, swarm state)
+.claude/
+.claude-flow/
+.swarm/
+.mcp.json
