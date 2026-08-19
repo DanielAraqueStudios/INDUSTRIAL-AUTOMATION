@@ -355,11 +355,11 @@ La Figura~\ref{fig:sfc} representa la secuencia de escalonamiento como un SFC de
 \hline
 \textbf{Paso} & \textbf{Bombas activas} & \textbf{Rango de caudal} \\
 \hline
-S0 & 0 & $Q < 0$ (o \texttt{M\_SIST\_RUN}=0) \\ \hline
+S0 & 0 & $Q{<}0$ (o \texttt{M\_SIST\_RUN}=0) \\ \hline
 S1 & 1 & 0 -- 50~\si{m^3/h} \\ \hline
 S2 & 2 & 50 -- 100~\si{m^3/h} \\ \hline
 S3 & 3 & 100 -- 150~\si{m^3/h} \\ \hline
-S4 & 4 & $>150$~\si{m^3/h} \\ \hline
+S4 & 4 & ${>}150$~\si{m^3/h} \\ \hline
 \end{tabular}
 \end{table}
 
@@ -388,27 +388,29 @@ S4 & 4 & $>150$~\si{m^3/h} \\ \hline
 
 % Condiciones de avance (a la derecha de cada transicion)
 \node[right] at ($(t01.east)+(0.2,0)$) {M\_LISTO $\wedge$ I\_START};
-\node[right] at ($(t12.east)+(0.2,0)$) {$Q>50$, TON 10~s};
-\node[right] at ($(t23.east)+(0.2,0)$) {$Q>100$, TON 10~s};
-\node[right] at ($(t34.east)+(0.2,0)$) {$Q>150$, TON 10~s};
+\node[right] at ($(t12.east)+(0.2,0)$) {$Q{>}50$, TON 10~s};
+\node[right] at ($(t23.east)+(0.2,0)$) {$Q{>}100$, TON 10~s};
+\node[right] at ($(t34.east)+(0.2,0)$) {$Q{>}150$, TON 10~s};
 
-% Retroceso: linea vertical punteada a la izquierda, unida a cada transicion
+% Retroceso: linea vertical punteada a la izquierda, unida a cada transicion.
+% (retX -| N) toma la x de retX (columna de la linea punteada) y la y del
+% nodo N, de modo que cada tramo horizontal queda perfectamente alineado.
 \coordinate (retX) at (-2.6,0);
 \draw[thick,dashed,-{Stealth[length=2mm]}]
-  (s4.west) -| (retX -| s4.west) -- (retX |- t34) -- (t34.west);
+  (s4.west) -- (retX -| s4.west) -- (retX -| t34) -- (t34.west);
 \draw[thick,dashed,-{Stealth[length=2mm]}]
-  (s3.west) -| (retX -| s3.west) -- (retX |- t23) -- (t23.west);
+  (s3.west) -- (retX -| s3.west) -- (retX -| t23) -- (t23.west);
 \draw[thick,dashed,-{Stealth[length=2mm]}]
-  (s2.west) -| (retX -| s2.west) -- (retX |- t12) -- (t12.west);
+  (s2.west) -- (retX -| s2.west) -- (retX -| t12) -- (t12.west);
 \draw[thick,dashed,-{Stealth[length=2mm]}]
-  (s1.west) -| (retX -| s1.west) -- (retX |- t01) -- (t01.west);
+  (s1.west) -- (retX -| s1.west) -- (retX -| t01) -- (t01.west);
 
 % Condiciones de retroceso (a la izquierda de cada linea punteada, alineadas
 % verticalmente con su transicion correspondiente)
-\node[align=right, anchor=east] at ($(retX)+(-0.2,0)|-(t34)$) {$Q<150$\\TON 30~s};
-\node[align=right, anchor=east] at ($(retX)+(-0.2,0)|-(t23)$) {$Q<100$\\TON 30~s};
-\node[align=right, anchor=east] at ($(retX)+(-0.2,0)|-(t12)$) {$Q<50$\\TON 30~s};
-\node[align=right, anchor=east] at ($(retX)+(-0.2,0)|-(t01)$) {I\_STOP $\vee$\\M\_FALLA\_GRAL};
+\node[align=right, anchor=east] at ($(retX)+(-0.2,0) -| (t34)$) {$Q{<}150$\\TON 30~s};
+\node[align=right, anchor=east] at ($(retX)+(-0.2,0) -| (t23)$) {$Q{<}100$\\TON 30~s};
+\node[align=right, anchor=east] at ($(retX)+(-0.2,0) -| (t12)$) {$Q{<}50$\\TON 30~s};
+\node[align=right, anchor=east] at ($(retX)+(-0.2,0) -| (t01)$) {I\_STOP $\vee$\\M\_FALLA\_GRAL};
 \end{tikzpicture}%
 }
 \caption{SFC de escalonamiento: pasos S0--S4 (número de bombas activas) con transiciones de avance temporizadas a 10~s y de retroceso a 30~s.}
@@ -470,8 +472,8 @@ Dado que la validación se realiza sobre el diseño lógico (no hay planta físi
 \textbf{Escenario} & \textbf{Entrada} & \textbf{Respuesta esperada del PLC} \\
 \hline
 Arranque normal & \texttt{I\_MODE\_AUTO}=1, \texttt{I\_START} pulsado, sin fallas, nivel OK & \texttt{M\_LISTO}=1, SFC avanza S0$\to$S1 activando la bomba líder del ciclo actual \\ \hline
-Incremento de demanda & $Q$ sube de 40 a 120~\si{m^3/h} y se sostiene $>150\,\si{m^3/h}$ durante $\geq10$~s & SFC avanza S1$\to$S2$\to$S3 (según Tabla~\ref{tab:umbrales}); en $Q>150$ sostenido, avanza a S4 activando la 4ª bomba disponible del vector \texttt{orden} \\ \hline
-Disminución de demanda & $Q$ cae y permanece $<100\,\si{m^3/h}$ durante $\geq30$~s & SFC retrocede S3$\to$S2 deteniendo la última bomba arrancada del ciclo (Sección 7.4); si $Q$ vuelve a subir antes de los 30~s, el temporizador de retroceso se reinicia y no hay parada \\ \hline
+Incremento de demanda & $Q$ sube de 40 a 120~\si{m^3/h} y se sostiene ${>}150\,\si{m^3/h}$ durante $\geq10$~s & SFC avanza S1$\to$S2$\to$S3 (según Tabla~\ref{tab:umbrales}); en $Q{>}150$ sostenido, avanza a S4 activando la 4ª bomba disponible del vector \texttt{orden} \\ \hline
+Disminución de demanda & $Q$ cae y permanece ${<}100\,\si{m^3/h}$ durante $\geq30$~s & SFC retrocede S3$\to$S2 deteniendo la última bomba arrancada del ciclo (Sección 7.4); si $Q$ vuelve a subir antes de los 30~s, el temporizador de retroceso se reinicia y no hay parada \\ \hline
 Falla de B3 con demanda de 3 bombas & \texttt{I\_B3\_FALLA}=1, sistema en S3 & B3 se detiene de inmediato, \texttt{Disponible[B3]}=FALSE, \texttt{M\_FALLA\_GRAL}=1, \texttt{Q\_ALARMA}=1; el algoritmo selecciona B1, B2 y B4 (excluye B3) para mantener 3 bombas activas \\ \hline
 Rearme tras falla & \texttt{I\_RESET} pulsado con \texttt{I\_B3\_FALLA}=0 & \texttt{M\_FALLA\_GRAL}$\to$0 (si no hay otras fallas activas), \texttt{Disponible[B3]} vuelve a TRUE y B3 reingresa al vector \texttt{orden} en la posición que le corresponda por rotación \\ \hline
 Bajo nivel de tanque & \texttt{I\_LSL\_TANQUE}=0 (nivel bajo) & \texttt{M\_LISTO}$\to$0 inmediatamente, SFC fuerza retorno a S0 deteniendo todas las bombas, \texttt{Q\_ALARMA}=1, bloqueo de nuevos arranques hasta \texttt{I\_LSL\_TANQUE}=1 \\ \hline
