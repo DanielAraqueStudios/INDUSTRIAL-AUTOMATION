@@ -272,17 +272,19 @@ Network 7 & Out\_XOR  & \%Q0.6 \\ \hline
 
 \begin{figure*}[t]
 \centering
-\begin{tabular}{cccc}
-\imgcell{03-ob1-network1-out-and-q00.jpeg}{0.22\linewidth} &
-\imgcell{03-ob1-network2-out-nand-q01.jpeg}{0.22\linewidth} &
-\imgcell{03-ob1-network3-out-nor-q02.jpeg}{0.22\linewidth} &
-\imgcell{03-ob1-network4-out-not-q03.jpeg}{0.22\linewidth} \\
-\small Network 1 (AND$\to$\%Q0.0) & \small Network 2 (NAND$\to$\%Q0.1) & \small Network 3 (NOR$\to$\%Q0.2) & \small Network 4 (NOT$\to$\%Q0.3) \\[6pt]
-\imgcell{03-ob1-network5-out-or-q04.jpeg}{0.22\linewidth} &
-\imgcell{03-ob1-network6-out-xnor-q05.jpeg}{0.22\linewidth} &
-\imgcell{03-ob1-network7-out-xor-q06.jpeg}{0.22\linewidth} &
+\begin{tabular}{cc}
+\imgcell{03-ob1-network1-out-and-q00.jpeg}{0.47\linewidth} &
+\imgcell{03-ob1-network2-out-nand-q01.jpeg}{0.47\linewidth} \\
+\small Network 1 (AND$\to$\%Q0.0) & \small Network 2 (NAND$\to$\%Q0.1) \\[6pt]
+\imgcell{03-ob1-network3-out-nor-q02.jpeg}{0.47\linewidth} &
+\imgcell{03-ob1-network4-out-not-q03.jpeg}{0.47\linewidth} \\
+\small Network 3 (NOR$\to$\%Q0.2) & \small Network 4 (NOT$\to$\%Q0.3) \\[6pt]
+\imgcell{03-ob1-network5-out-or-q04.jpeg}{0.47\linewidth} &
+\imgcell{03-ob1-network6-out-xnor-q05.jpeg}{0.47\linewidth} \\
+\small Network 5 (OR$\to$\%Q0.4) & \small Network 6 (XNOR$\to$\%Q0.5) \\[6pt]
+\imgcell{03-ob1-network7-out-xor-q06.jpeg}{0.47\linewidth} &
 \\
-\small Network 5 (OR$\to$\%Q0.4) & \small Network 6 (XNOR$\to$\%Q0.5) & \small Network 7 (XOR$\to$\%Q0.6) & \\
+\small Network 7 (XOR$\to$\%Q0.6) & \\
 \end{tabular}
 \caption{OB1, redes 1 a 7: mapeo de cada salida lógica del DB\_Global a su salida física \%Q correspondiente.}
 \label{fig:ob1-outputs}
@@ -290,12 +292,13 @@ Network 7 & Out\_XOR  & \%Q0.6 \\ \hline
 
 \begin{figure*}[t]
 \centering
-\begin{tabular}{cccc}
-\imgcell{04-ob1-network8-call-fc-fbd.jpeg}{0.22\linewidth} &
-\imgcell{04-ob1-network9-call-fc-lad.jpeg}{0.22\linewidth} &
-\imgcell{04-ob1-network10-call-fc-scl.jpeg}{0.22\linewidth} &
-\imgcell{04-ob1-network11-call-fc-stl.jpeg}{0.22\linewidth} \\
-\small Network 8 (Sel\_Lenguaje=1 $\Rightarrow$ FC\_FBD) & \small Network 9 (Sel\_Lenguaje=2 $\Rightarrow$ FC\_LAD) & \small Network 10 (Sel\_Lenguaje=3 $\Rightarrow$ FC\_SCL) & \small Network 11 (Sel\_Lenguaje=4 $\Rightarrow$ FC\_STL) \\
+\begin{tabular}{cc}
+\imgcell{04-ob1-network8-call-fc-fbd.jpeg}{0.47\linewidth} &
+\imgcell{04-ob1-network9-call-fc-lad.jpeg}{0.47\linewidth} \\
+\small Network 8 (Sel\_Lenguaje=1 $\Rightarrow$ FC\_FBD) & \small Network 9 (Sel\_Lenguaje=2 $\Rightarrow$ FC\_LAD) \\[6pt]
+\imgcell{04-ob1-network10-call-fc-scl.jpeg}{0.47\linewidth} &
+\imgcell{04-ob1-network11-call-fc-stl.jpeg}{0.47\linewidth} \\
+\small Network 10 (Sel\_Lenguaje=3 $\Rightarrow$ FC\_SCL) & \small Network 11 (Sel\_Lenguaje=4 $\Rightarrow$ FC\_STL) \\
 \end{tabular}
 \caption{OB1, redes 8 a 11: selector de lenguaje activo mediante comparación entera de \texttt{Sel\_Lenguaje} y llamado condicional del bloque de función correspondiente.}
 \label{fig:ob1-selector}
@@ -307,17 +310,19 @@ El bloque \texttt{FC\_FBD} implementa las siete compuertas mediante bloques de f
 
 \begin{figure*}[t]
 \centering
-\begin{tabular}{cccc}
-\imgcell{05-fc-fbd-and.jpeg}{0.22\linewidth} &
-\imgcell{05-fc-fbd-or.jpeg}{0.22\linewidth} &
-\imgcell{05-fc-fbd-not.jpeg}{0.22\linewidth} &
-\imgcell{05-fc-fbd-nand.jpeg}{0.22\linewidth} \\
-\small AND & \small OR & \small NOT & \small NAND \\[6pt]
-\imgcell{05-fc-fbd-nor.jpeg}{0.22\linewidth} &
-\imgcell{05-fc-fbd-xor.jpeg}{0.22\linewidth} &
-\imgcell{05-fc-fbd-xnor.jpeg}{0.22\linewidth} &
+\begin{tabular}{cc}
+\imgcell{05-fc-fbd-and.jpeg}{0.47\linewidth} &
+\imgcell{05-fc-fbd-or.jpeg}{0.47\linewidth} \\
+\small AND & \small OR \\[6pt]
+\imgcell{05-fc-fbd-not.jpeg}{0.47\linewidth} &
+\imgcell{05-fc-fbd-nand.jpeg}{0.47\linewidth} \\
+\small NOT & \small NAND \\[6pt]
+\imgcell{05-fc-fbd-nor.jpeg}{0.47\linewidth} &
+\imgcell{05-fc-fbd-xor.jpeg}{0.47\linewidth} \\
+\small NOR & \small XOR \\[6pt]
+\imgcell{05-fc-fbd-xnor.jpeg}{0.47\linewidth} &
 \\
-\small NOR & \small XOR & \small XNOR & \\
+\small XNOR & \\
 \end{tabular}
 \caption{Bloque \texttt{FC\_FBD}: implementación en FUP de las siete compuertas lógicas sobre \texttt{DB\_Global.Entrada\_A/B}.}
 \label{fig:fbd-grid}
@@ -329,17 +334,19 @@ El bloque \texttt{FC\_LAD} implementa las mismas siete compuertas como esquemas 
 
 \begin{figure*}[t]
 \centering
-\begin{tabular}{cccc}
-\imgcell{06-fc-lad-and.jpeg}{0.22\linewidth} &
-\imgcell{06-fc-lad-or.jpeg}{0.22\linewidth} &
-\imgcell{06-fc-lad-not.jpeg}{0.22\linewidth} &
-\imgcell{06-fc-lad-nand.jpeg}{0.22\linewidth} \\
-\small AND & \small OR & \small NOT & \small NAND \\[6pt]
-\imgcell{06-fc-lad-nor.jpeg}{0.22\linewidth} &
-\imgcell{06-fc-lad-xor.jpeg}{0.22\linewidth} &
-\imgcell{06-fc-lad-xnor.jpeg}{0.22\linewidth} &
+\begin{tabular}{cc}
+\imgcell{06-fc-lad-and.jpeg}{0.47\linewidth} &
+\imgcell{06-fc-lad-or.jpeg}{0.47\linewidth} \\
+\small AND & \small OR \\[6pt]
+\imgcell{06-fc-lad-not.jpeg}{0.47\linewidth} &
+\imgcell{06-fc-lad-nand.jpeg}{0.47\linewidth} \\
+\small NOT & \small NAND \\[6pt]
+\imgcell{06-fc-lad-nor.jpeg}{0.47\linewidth} &
+\imgcell{06-fc-lad-xor.jpeg}{0.47\linewidth} \\
+\small NOR & \small XOR \\[6pt]
+\imgcell{06-fc-lad-xnor.jpeg}{0.47\linewidth} &
 \\
-\small NOR & \small XOR & \small XNOR & \\
+\small XNOR & \\
 \end{tabular}
 \caption{Bloque \texttt{FC\_LAD}: implementación en KOP de las siete compuertas lógicas sobre \texttt{DB\_Global.Entrada\_A/B}.}
 \label{fig:lad-grid}
