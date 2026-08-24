@@ -1,0 +1,603 @@
+\documentclass[conference]{IEEEtran}
+\usepackage[spanish]{babel}
+% babel-spanish activa "<" y ">" como caracteres especiales (shorthand para
+% comillas angulares << >>). Eso rompe cualquier uso de < o > como simbolo
+% matematico (p. ej. "$Q<150$"), incluso protegido entre llaves. babel solo
+% activa los shorthands del idioma principal al llegar a \begin{document}
+% (no al cargar el paquete), asi que \shorthandoff debe diferirse con
+% \AtBeginDocument; llamarlo aqui directamente no tiene efecto porque babel
+% los reactiva despues. El resto de shorthands de spanish (p. ej. ~ para
+% espacio irrompible) siguen activos.
+\AtBeginDocument{\shorthandoff{<>}}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{siunitx}
+\usepackage{float}
+\usepackage{placeins}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{grffile}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric,arrows.meta,positioning,calc,fit,backgrounds}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{etoolbox}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{gray}\itshape,
+  stringstyle=\color{teal},
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  xleftmargin=1.5em,
+  captionpos=b
+}
+
+% Placeholder visual para figuras aun no disponibles (no requiere archivo externo).
+% Uso: \imgplaceholder{<alto>}{<descripcion de la imagen a insertar>}
+\newcommand{\imgplaceholder}[2]{%
+  \fbox{\begin{minipage}[c][#1][c]{\dimexpr\linewidth-2\fboxsep-2\fboxrule}%
+    \centering\itshape\small #2
+  \end{minipage}}%
+}
+
+% Figura "inteligente" para evidencia real (capturas de TIA Portal/FluidSim/HMI).
+% Si el archivo images/#1 existe, lo inserta; si no, muestra un placeholder
+% con el nombre esperado, de forma que el documento compile en ambos casos.
+% Uso: \imgslot{<archivo en images/>}{<alto placeholder>}{<caption>}{<label>}
+\newcommand{\imgslot}[4]{%
+  \begin{figure}[H]
+    \centering
+    \IfFileExists{images/#1}{%
+      \includegraphics[width=\linewidth]{images/#1}%
+    }{%
+      \imgplaceholder{#2}{Pendiente de captura: \texttt{images/#1} --- #3}%
+    }%
+    \caption{#3}
+    \label{#4}
+  \end{figure}%
+}
+
+% Celda de imagen para cuadriculas de figuras (varias capturas por figura*).
+% Si el archivo no existe, deja una celda de reserva del mismo ancho.
+% Uso: \imgcell{<archivo en images/>}{<ancho>}
+\newcommand{\imgcell}[2]{%
+  \IfFileExists{images/#1}{%
+    \includegraphics[width=#2]{images/#1}%
+  }{%
+    \fbox{\begin{minipage}[c][2cm][c]{\dimexpr#2-2\fboxsep-2\fboxrule}%
+      \centering\tiny\itshape Pendiente\\#1
+    \end{minipage}}%
+  }%
+}
+
+\begin{document}
+
+\title{Programación Inicial de Compuertas Lógicas en PLC Siemens S7-1500 mediante TIA Portal: Implementación Multi-Lenguaje con Selección en Tiempo de Ejecución y Comunicación OPC}
+
+\author{
+    \IEEEauthorblockN{
+         Daniel García Araque
+    }
+    \IEEEauthorblockA{Ingeniería en Mecatrónica\\
+    Universidad Militar Nueva Granada\\
+    Cajicá, Colombia\\
+    Código: 7004185\\
+    est.daniel.garciaa@unimilitar.edu.co
+  }
+}
+
+\maketitle
+
+\begin{abstract}
+Este documento presenta el desarrollo de la práctica de programación inicial de un PLC Siemens S7-1500 mediante el sistema de desarrollo TIA Portal\textregistered, orientada a la implementación y validación de las siete compuertas lógicas fundamentales AND, OR, NOT, NAND, NOR, XOR y XNOR. A diferencia de una implementación tradicional con un bloque de función independiente por compuerta y por lenguaje, el proyecto se estructuró alrededor de un bloque de datos global único (\texttt{DB\_Global}) que concentra las entradas (\texttt{Entrada\_A}, \texttt{Entrada\_B}), el estado de las siete salidas lógicas y una variable entera de selección de lenguaje (\texttt{Sel\_Lenguaje}). Las siete compuertas se programaron de forma completa en los cuatro lenguajes de programación industrial normalizados por IEC~61131-3 soportados por TIA Portal --SCL (texto estructurado), FUP (diagrama de funciones/FBD), KOP (esquema de contactos/LAD) y AWL (lista de instrucciones/STL)--, encapsuladas en los bloques de función \texttt{FC\_SCL}, \texttt{FC\_FBD}, \texttt{FC\_LAD} y \texttt{FC\_STL}, respectivamente. El bloque de organización principal (OB1) invoca en cada ciclo únicamente el bloque correspondiente al valor de \texttt{Sel\_Lenguaje}, lo que permite alternar en tiempo de ejecución el lenguaje activo sin recompilar ni reconfigurar el proyecto, y mapea las siete salidas booleanas del DB global a las salidas físicas \%Q0.0--\%Q0.6 de la CPU. El hardware de salida se representó de forma virtual mediante el simulador FluidSim\textregistered, enlazado al PLC a través de un servidor OPC (Kepware) y del servidor OPC~UA nativo habilitado en la CPU S7-1500, mientras que una HMI KTP700 Basic PN, conectada al PLC mediante PROFINET, permite conmutar el lenguaje activo, forzar las entradas A y B, y visualizar en tiempo real el estado de las siete salidas lógicas mediante indicadores luminosos. Se documentan la arquitectura de bloques del proyecto, las tablas de verdad de referencia, el código desarrollado en cada lenguaje, la configuración de la comunicación OPC/OPC~UA y la validación del comportamiento obtenido frente al esperado para cada compuerta.
+
+\vspace{1em}
+\noindent \textbf{\textit{Palabras clave---}} PLC Siemens S7-1500, TIA Portal, IEC~61131-3, compuertas lógicas, AND, OR, NOT, NAND, NOR, XOR, XNOR, SCL, FUP, KOP, AWL, OPC, OPC UA, FluidSim, HMI.
+\end{abstract}
+
+\section{Introducción}
+
+La automatización industrial constituye uno de los pilares fundamentales en el desarrollo de sistemas productivos modernos, permitiendo el control eficiente, seguro y confiable de procesos industriales mediante el uso de controladores lógicos programables (PLC). En este contexto, la programación de PLC se basa en principios de lógica digital, donde las compuertas lógicas representan los bloques elementales para la toma de decisiones dentro de un sistema automatizado \cite{john_tiegelkamp}. El dominio de estos conceptos resulta esencial para comprender el funcionamiento interno de los sistemas de control y su aplicación en entornos industriales reales.
+
+Esta práctica se enfoca en la programación inicial de un PLC utilizando el sistema de desarrollo TIA Portal\textregistered\ para la plataforma Siemens Simatic S7-1500, abordando la implementación de las siete compuertas lógicas fundamentales AND, OR, NOT, NAND, NOR, XOR y XNOR en los cuatro lenguajes de programación industrial normalizados por IEC~61131-3 disponibles en dicho entorno: SCL, FUP, KOP y AWL \cite{berger_step7,iec61131_3}. En lugar de programar bloques aislados por compuerta y lenguaje, el proyecto centraliza las entradas y salidas en un bloque de datos global (\texttt{DB\_Global}) y añade una variable de selección (\texttt{Sel\_Lenguaje}) evaluada en el OB1 mediante comparaciones \texttt{==}, de forma que el bloque de función activo (FUP, KOP, SCL o AWL) puede alternarse en caliente desde la propia HMI. Adicionalmente, se integra el uso del simulador de hardware FluidSim\textregistered, junto con la comunicación mediante un servidor OPC (Kepware) y el servidor OPC~UA nativo de la CPU S7-1500, lo que permite representar de manera virtual las salidas físicas del proceso, verificar el comportamiento de las señales digitales y visualizar los resultados en una interfaz HMI.
+
+El documento se organiza de la siguiente manera: la Sección~\ref{sec:marco} presenta el marco teórico de las compuertas lógicas y de los lenguajes de programación empleados; la Sección~\ref{sec:materiales} describe la configuración de hardware y software utilizada; la Sección~\ref{sec:implementacion} desarrolla la arquitectura del proyecto y la implementación de las siete compuertas en los cuatro lenguajes; las Secciones~\ref{sec:simulacion} y~\ref{sec:opc} documentan la simulación del hardware y la comunicación OPC/OPC~UA; la Sección~\ref{sec:hmi} describe la interfaz HMI; y las secciones finales presentan los resultados obtenidos, el análisis correspondiente, las conclusiones y las respuestas a las preguntas de discusión planteadas en la guía de laboratorio.
+
+\section{Objetivos}
+
+Desarrollar competencias básicas en programación de PLC mediante el uso del sistema de desarrollo TIA Portal\textregistered, implementando y validando el funcionamiento de las compuertas lógicas fundamentales AND, OR, NOT, NAND, NOR, XOR y XNOR en la plataforma Simatic S7-1500, integrando herramientas de simulación y comunicación industrial.
+
+\subsection*{Objetivos Específicos}
+\begin{itemize}
+    \item Familiarizar al estudiante con el entorno de desarrollo TIA Portal\textregistered, reconociendo su estructura, herramientas y flujo de trabajo para la programación de PLC.
+    \item Diseñar e implementar, para un mismo conjunto de compuertas lógicas, programas de control equivalentes en los cuatro lenguajes de programación industrial normalizados por IEC~61131-3 (SCL, FUP, KOP y AWL), identificando sus características, ventajas y desventajas.
+    \item Centralizar las variables de entrada, salida y selección del proyecto en un bloque de datos global, y estructurar el OB1 para permitir la conmutación del lenguaje de ejecución activo en tiempo real.
+    \item Simular el hardware de salida asociado a las compuertas lógicas mediante FluidSim\textregistered, garantizando la correcta interacción entre software y sistema de control.
+    \item Establecer comunicación entre el PLC y el entorno de simulación a través de un servidor OPC y del servidor OPC~UA de la CPU, permitiendo la visualización y validación de las salidas digitales.
+    \item Analizar el comportamiento de las señales digitales del PLC y su representación en la HMI, verificando la correcta ejecución de la lógica programada en cada uno de los cuatro lenguajes.
+\end{itemize}
+
+\section{Marco Teórico}
+\label{sec:marco}
+
+\subsection*{Compuertas lógicas fundamentales}
+Las compuertas lógicas son los elementos básicos del álgebra de Boole aplicados al control digital. La Tabla~\ref{tab:verdad} resume las tablas de verdad de las siete compuertas abordadas en esta práctica, para dos entradas binarias $A$ y $B$ (la compuerta NOT emplea únicamente la entrada $A$).
+
+\begin{table}[H]
+\centering
+\caption{Tablas de verdad de las compuertas AND, OR, NOT, NAND, NOR, XOR y XNOR}
+\label{tab:verdad}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+\textbf{A} & \textbf{B} & \textbf{AND} & \textbf{OR} & \textbf{NOT(A)} & \textbf{NAND} & \textbf{NOR} & \textbf{XOR} \\
+\hline
+0 & 0 & 0 & 0 & 1 & 1 & 1 & 0 \\ \hline
+0 & 1 & 0 & 1 & 1 & 1 & 0 & 1 \\ \hline
+1 & 0 & 0 & 1 & 0 & 1 & 0 & 1 \\ \hline
+1 & 1 & 1 & 1 & 0 & 0 & 0 & 0 \\ \hline
+\end{tabular}
+
+\vspace{4pt}
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{A} & \textbf{B} & \textbf{XNOR} \\
+\hline
+0 & 0 & 1 \\ \hline
+0 & 1 & 0 \\ \hline
+1 & 0 & 0 \\ \hline
+1 & 1 & 1 \\ \hline
+\end{tabular}
+\end{table}
+
+Las expresiones booleanas correspondientes son:
+\begin{align}
+Q_{AND} &= A \wedge B \label{eq:and}\\
+Q_{OR}  &= A \vee B \label{eq:or}\\
+Q_{NOT} &= \overline{A} \label{eq:not}\\
+Q_{NAND} &= \overline{A \wedge B} \label{eq:nand}\\
+Q_{NOR} &= \overline{A \vee B} \label{eq:nor}\\
+Q_{XOR} &= (A \wedge \overline{B}) \vee (\overline{A} \wedge B) \label{eq:xor}\\
+Q_{XNOR} &= \overline{(A \wedge \overline{B}) \vee (\overline{A} \wedge B)} \label{eq:xnor}
+\end{align}
+
+\subsection*{Lenguajes de programación IEC~61131-3 en TIA Portal}
+La norma IEC~61131-3 define los lenguajes normalizados de programación de controladores industriales \cite{iec61131_3}. TIA Portal\textregistered\ soporta cuatro de ellos, empleados en esta práctica:
+
+\begin{itemize}
+    \item \textbf{SCL (Structured Control Language):} lenguaje de texto estructurado similar a Pascal, orientado a operaciones matemáticas complejas, estructuras de control (\texttt{IF}, \texttt{CASE}, \texttt{FOR}) y legibilidad de algoritmos.
+    \item \textbf{FUP (Funktionsplan / FBD -- Function Block Diagram):} lenguaje gráfico que representa la lógica como bloques de funciones interconectados por líneas de señal (bloques \texttt{\&}, \texttt{>=1}, negación de bit, etc.), de lectura intuitiva para lógica combinacional.
+    \item \textbf{KOP (Kontaktplan / LAD -- Ladder Diagram):} lenguaje gráfico que emula los diagramas de relés electromecánicos mediante contactos (normalmente abierto \texttt{-| |-}, normalmente cerrado \texttt{-|/|-}) y bobinas (\texttt{-( )-}), de amplio uso en electricidad industrial.
+    \item \textbf{AWL (Anweisungsliste / STL -- Statement List):} lenguaje textual de bajo nivel, basado en un acumulador (registro RLO), cercano al código ensamblador del procesador del PLC; ofrece el máximo control sobre la ejecución a costa de una menor legibilidad.
+\end{itemize}
+
+\subsection*{Comunicación OPC y OPC UA}
+OPC (\emph{Open Platform Communications}) es un estándar de comunicación industrial que permite el intercambio de datos entre dispositivos y aplicaciones de distintos fabricantes mediante un modelo cliente-servidor \cite{marshall_industrial_ethernet}. OPC~UA (\emph{Unified Architecture}) es la evolución orientada a servicios de dicho estándar, integrada de forma nativa como servidor en la CPU Simatic S7-1500. En esta práctica, un servidor OPC de terceros (Kepware/KEPServerEX) actúa como intermediario entre las salidas físicas del proyecto PLC en TIA Portal y el entorno de simulación FluidSim\textregistered, mientras que el servidor OPC~UA de la propia CPU se habilita como canal adicional de acceso estandarizado a las variables del proyecto.
+
+\subsection*{HMI}
+La interfaz Hombre-Máquina (HMI) permite visualizar en tiempo real el estado de las variables del proceso y forzar entradas de prueba. En esta práctica, la HMI adicionalmente permite seleccionar el lenguaje de programación activo (FUP, KOP, SCL o AWL) sin necesidad de recompilar el proyecto, facilitando la validación cruzada de los cuatro lenguajes sobre el mismo hardware simulado.
+
+\section{Materiales y Configuración}
+\label{sec:materiales}
+
+La Tabla~\ref{tab:materiales} resume los recursos de software y hardware empleados en el desarrollo de la práctica.
+
+\begin{table}[H]
+\centering
+\caption{Materiales, software y hardware utilizados}
+\label{tab:materiales}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|p{4.6cm}|c|l|}
+\hline
+\textbf{Descripción} & \textbf{Cant.} & \textbf{Unidad} \\
+\hline
+Sistema de desarrollo TIA Portal\textregistered & 1 & Unidad \\ \hline
+PLC Siemens Simatic S7-1500 (CPU 1516-3 PN) & 1 & Unidad \\ \hline
+HMI Siemens Simatic KTP700 Basic PN & 1 & Unidad \\ \hline
+Computador & 1 & Unidad \\ \hline
+FluidSim\textregistered & 1 & Unidad \\ \hline
+Servidor OPC Kepware/KEPServerEX & 1 & Unidad \\ \hline
+Servidor OPC~UA (nativo CPU S7-1500) & 1 & Unidad \\ \hline
+\end{tabular}
+\end{table}
+
+La Fig.~\ref{fig:hw-rack} muestra la configuración de hardware del proyecto en TIA Portal: la CPU \texttt{PLC\_1} con sus módulos de entradas/salidas digitales (DI/DQ) y analógicas (AI/AQ) integrados en el rack. La Fig.~\ref{fig:net-topology} muestra la topología de red configurada, con el PLC (\texttt{PLC\_1}) y la HMI (\texttt{HMI\_1}) enlazados mediante la subred PROFINET \texttt{PN/IE\_1}.
+
+\imgslot{02-tia-hardware-config-rack.jpeg}{4cm}{Configuración de hardware en TIA Portal: rack de la CPU S7-1500 (\texttt{PLC\_1}) con sus módulos de E/S.}{fig:hw-rack}
+
+\imgslot{11-network-topology-plc-hmi.jpeg}{2.5cm}{Topología de red: PLC (\texttt{PLC\_1}) y HMI (\texttt{HMI\_1}) enlazados mediante la subred PROFINET \texttt{PN/IE\_1}.}{fig:net-topology}
+
+\section{Implementación de las Compuertas Lógicas}
+\label{sec:implementacion}
+
+A diferencia de una implementación con un bloque de función independiente por compuerta y por lenguaje, el proyecto concentra toda la información del proceso en un único bloque de datos global (\texttt{DB\_Global}) y en cuatro bloques de función --uno por lenguaje-- que implementan de forma completa las siete compuertas lógicas. Un bloque adicional en el OB1 evalúa una variable entera de selección para decidir, en cada ciclo de barrido, cuál de los cuatro bloques se ejecuta.
+
+\subsection{Bloque de datos global (DB\_Global)}
+
+La Fig.~\ref{fig:db-global} muestra la estructura del bloque de datos global, que centraliza las dos entradas booleanas, la variable entera de selección de lenguaje y las siete salidas booleanas, una por compuerta. Todas las variables se configuraron como accesibles, escribibles y visibles desde la HMI (columnas \emph{Accessible from HMI/OPC UA}, \emph{Writable from HMI/OPC UA} y \emph{Visible in HMI engineering}), lo que permite que tanto las entradas A/B como el selector de lenguaje se manipulen directamente desde la pantalla HMI.
+
+\imgslot{09-db-global-structure.jpeg}{4.5cm}{Estructura del bloque de datos global \texttt{DB\_Global}: entradas \texttt{Entrada\_A}/\texttt{Entrada\_B}, selector \texttt{Sel\_Lenguaje} y las siete salidas \texttt{Out\_AND}...\texttt{Out\_XNOR}.}{fig:db-global}
+
+La Tabla~\ref{tab:db-vars} detalla el tipo de dato y el propósito de cada variable del bloque.
+
+\begin{table}[H]
+\centering
+\caption{Variables del bloque de datos global DB\_Global}
+\label{tab:db-vars}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|l|c|p{3.6cm}|}
+\hline
+\textbf{Variable} & \textbf{Tipo} & \textbf{Descripción} \\
+\hline
+Entrada\_A & Bool & Entrada lógica A, forzada desde la HMI \\ \hline
+Entrada\_B & Bool & Entrada lógica B, forzada desde la HMI \\ \hline
+Sel\_Lenguaje & Int & Selector de lenguaje activo: 1=FUP, 2=KOP, 3=SCL, 4=AWL \\ \hline
+Out\_AND & Bool & Salida de la compuerta AND \\ \hline
+Out\_OR & Bool & Salida de la compuerta OR \\ \hline
+Out\_NOT & Bool & Salida de la compuerta NOT (sobre Entrada\_A) \\ \hline
+Out\_NAND & Bool & Salida de la compuerta NAND \\ \hline
+Out\_NOR & Bool & Salida de la compuerta NOR \\ \hline
+Out\_XOR & Bool & Salida de la compuerta XOR \\ \hline
+Out\_XNOR & Bool & Salida de la compuerta XNOR \\ \hline
+\end{tabular}
+\end{table}
+
+\subsection{Selector de lenguaje y mapeo de salidas físicas en OB1}
+
+El OB1 (bloque de organización principal) cumple dos funciones. En sus primeras siete redes (Fig.~\ref{fig:ob1-outputs}) asigna cada salida booleana del \texttt{DB\_Global} a una salida física \%Q de la CPU, según la Tabla~\ref{tab:io-fisico}, de forma que el estado calculado por la lógica programada quede disponible para el servidor OPC y, a través de este, para el simulador FluidSim\textregistered. En las cuatro redes siguientes (Fig.~\ref{fig:ob1-selector}) se compara la variable \texttt{Sel\_Lenguaje} contra los valores 1 a 4 y, según el resultado, se invoca condicionalmente uno de los cuatro bloques de función \texttt{FC\_FBD}, \texttt{FC\_LAD}, \texttt{FC\_SCL} o \texttt{FC\_STL}.
+
+\begin{table}[H]
+\centering
+\caption{Mapeo de salidas del DB\_Global a salidas físicas (redes 1-7 del OB1)}
+\label{tab:io-fisico}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Red OB1} & \textbf{Variable} & \textbf{Salida física} \\
+\hline
+Network 1 & Out\_AND  & \%Q0.0 \\ \hline
+Network 2 & Out\_NAND & \%Q0.1 \\ \hline
+Network 3 & Out\_NOR  & \%Q0.2 \\ \hline
+Network 4 & Out\_NOT  & \%Q0.3 \\ \hline
+Network 5 & Out\_OR   & \%Q0.4 \\ \hline
+Network 6 & Out\_XNOR & \%Q0.5 \\ \hline
+Network 7 & Out\_XOR  & \%Q0.6 \\ \hline
+\end{tabular}
+\end{table}
+
+\begin{figure*}[t]
+\centering
+\begin{tabular}{cccc}
+\imgcell{03-ob1-network1-out-and-q00.jpeg}{0.22\linewidth} &
+\imgcell{03-ob1-network2-out-nand-q01.jpeg}{0.22\linewidth} &
+\imgcell{03-ob1-network3-out-nor-q02.jpeg}{0.22\linewidth} &
+\imgcell{03-ob1-network4-out-not-q03.jpeg}{0.22\linewidth} \\
+\small Network 1 (AND$\to$\%Q0.0) & \small Network 2 (NAND$\to$\%Q0.1) & \small Network 3 (NOR$\to$\%Q0.2) & \small Network 4 (NOT$\to$\%Q0.3) \\[6pt]
+\imgcell{03-ob1-network5-out-or-q04.jpeg}{0.22\linewidth} &
+\imgcell{03-ob1-network6-out-xnor-q05.jpeg}{0.22\linewidth} &
+\imgcell{03-ob1-network7-out-xor-q06.jpeg}{0.22\linewidth} &
+\\
+\small Network 5 (OR$\to$\%Q0.4) & \small Network 6 (XNOR$\to$\%Q0.5) & \small Network 7 (XOR$\to$\%Q0.6) & \\
+\end{tabular}
+\caption{OB1, redes 1 a 7: mapeo de cada salida lógica del DB\_Global a su salida física \%Q correspondiente.}
+\label{fig:ob1-outputs}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\begin{tabular}{cccc}
+\imgcell{04-ob1-network8-call-fc-fbd.jpeg}{0.22\linewidth} &
+\imgcell{04-ob1-network9-call-fc-lad.jpeg}{0.22\linewidth} &
+\imgcell{04-ob1-network10-call-fc-scl.jpeg}{0.22\linewidth} &
+\imgcell{04-ob1-network11-call-fc-stl.jpeg}{0.22\linewidth} \\
+\small Network 8 (Sel\_Lenguaje=1 $\Rightarrow$ FC\_FBD) & \small Network 9 (Sel\_Lenguaje=2 $\Rightarrow$ FC\_LAD) & \small Network 10 (Sel\_Lenguaje=3 $\Rightarrow$ FC\_SCL) & \small Network 11 (Sel\_Lenguaje=4 $\Rightarrow$ FC\_STL) \\
+\end{tabular}
+\caption{OB1, redes 8 a 11: selector de lenguaje activo mediante comparación entera de \texttt{Sel\_Lenguaje} y llamado condicional del bloque de función correspondiente.}
+\label{fig:ob1-selector}
+\end{figure*}
+
+\subsection{Implementación en FUP (FC\_FBD)}
+
+El bloque \texttt{FC\_FBD} implementa las siete compuertas mediante bloques de función gráficos: \texttt{\&} para AND/NAND, \texttt{>=1} para OR/NOR, negación de bit para NOT, y bloque \texttt{x} (OR exclusivo) para XOR/XNOR, cada uno seguido de un elemento de igualdad o negación según corresponda. La Fig.~\ref{fig:fbd-grid} muestra las siete redes del bloque.
+
+\begin{figure*}[t]
+\centering
+\begin{tabular}{cccc}
+\imgcell{05-fc-fbd-and.jpeg}{0.22\linewidth} &
+\imgcell{05-fc-fbd-or.jpeg}{0.22\linewidth} &
+\imgcell{05-fc-fbd-not.jpeg}{0.22\linewidth} &
+\imgcell{05-fc-fbd-nand.jpeg}{0.22\linewidth} \\
+\small AND & \small OR & \small NOT & \small NAND \\[6pt]
+\imgcell{05-fc-fbd-nor.jpeg}{0.22\linewidth} &
+\imgcell{05-fc-fbd-xor.jpeg}{0.22\linewidth} &
+\imgcell{05-fc-fbd-xnor.jpeg}{0.22\linewidth} &
+\\
+\small NOR & \small XOR & \small XNOR & \\
+\end{tabular}
+\caption{Bloque \texttt{FC\_FBD}: implementación en FUP de las siete compuertas lógicas sobre \texttt{DB\_Global.Entrada\_A/B}.}
+\label{fig:fbd-grid}
+\end{figure*}
+
+\subsection{Implementación en KOP (FC\_LAD)}
+
+El bloque \texttt{FC\_LAD} implementa las mismas siete compuertas como esquemas de contactos: AND y OR con contactos en serie/paralelo normalmente abiertos, NOT con un contacto normalmente cerrado, NAND y NOR como las negaciones de AND/OR mediante contactos normalmente cerrados, y XOR/XNOR mediante dos ramas paralelas que combinan contactos abiertos y cerrados de A y B. La Fig.~\ref{fig:lad-grid} muestra las siete redes del bloque.
+
+\begin{figure*}[t]
+\centering
+\begin{tabular}{cccc}
+\imgcell{06-fc-lad-and.jpeg}{0.22\linewidth} &
+\imgcell{06-fc-lad-or.jpeg}{0.22\linewidth} &
+\imgcell{06-fc-lad-not.jpeg}{0.22\linewidth} &
+\imgcell{06-fc-lad-nand.jpeg}{0.22\linewidth} \\
+\small AND & \small OR & \small NOT & \small NAND \\[6pt]
+\imgcell{06-fc-lad-nor.jpeg}{0.22\linewidth} &
+\imgcell{06-fc-lad-xor.jpeg}{0.22\linewidth} &
+\imgcell{06-fc-lad-xnor.jpeg}{0.22\linewidth} &
+\\
+\small NOR & \small XOR & \small XNOR & \\
+\end{tabular}
+\caption{Bloque \texttt{FC\_LAD}: implementación en KOP de las siete compuertas lógicas sobre \texttt{DB\_Global.Entrada\_A/B}.}
+\label{fig:lad-grid}
+\end{figure*}
+
+\subsection{Implementación en SCL (FC\_SCL)}
+
+El bloque \texttt{FC\_SCL} implementa las siete compuertas como asignaciones directas sobre las variables del \texttt{DB\_Global}, según se observa en la Fig.~\ref{fig:scl-code} y se transcribe en el Listado~\ref{lst:scl}.
+
+\imgslot{07-fc-scl-code.jpeg}{4cm}{Bloque \texttt{FC\_SCL}: código fuente de las siete compuertas lógicas.}{fig:scl-code}
+
+\begin{lstlisting}[language=Pascal, caption={SCL -- Bloque FC\_SCL, siete compuertas}, label={lst:scl}]
+"DB_Global".Out_AND := "DB_Global".Entrada_A AND "DB_Global".Entrada_B;
+"DB_Global".Out_OR := "DB_Global".Entrada_A OR "DB_Global".Entrada_B;
+"DB_Global".Out_NOT := NOT "DB_Global".Entrada_A;
+"DB_Global".Out_NAND := NOT ("DB_Global".Entrada_A AND "DB_Global".Entrada_B);
+"DB_Global".Out_NOR := NOT ("DB_Global".Entrada_A OR "DB_Global".Entrada_B);
+"DB_Global".Out_XOR := "DB_Global".Entrada_A XOR "DB_Global".Entrada_B;
+"DB_Global".Out_XNOR := NOT ("DB_Global".Entrada_A XOR "DB_Global".Entrada_B);
+\end{lstlisting}
+
+\subsection{Implementación en AWL (FC\_STL)}
+
+El bloque \texttt{FC\_STL} implementa las siete compuertas mediante instrucciones sobre el acumulador RLO (\texttt{A}, \texttt{O}, \texttt{X}, \texttt{AN}, \texttt{NOT}), según se observa en las Figs.~\ref{fig:stl-code1}-\ref{fig:stl-code2} y se transcribe en el Listado~\ref{lst:stl}.
+
+\imgslot{08-fc-stl-code-part1.jpeg}{4.2cm}{Bloque \texttt{FC\_STL}: código fuente, parte 1 (AND, OR, NOT, NAND).}{fig:stl-code1}
+
+\imgslot{08-fc-stl-code-part2.jpeg}{4.2cm}{Bloque \texttt{FC\_STL}: código fuente, parte 2 (NOR, XOR, XNOR).}{fig:stl-code2}
+
+\begin{lstlisting}[caption={AWL -- Bloque FC\_STL, siete compuertas}, label={lst:stl}]
+// AND
+A     "DB_Global".Entrada_A
+A     "DB_Global".Entrada_B
+=     "DB_Global".Out_AND
+
+// OR
+O     "DB_Global".Entrada_A
+O     "DB_Global".Entrada_B
+=     "DB_Global".Out_OR
+
+// NOT
+AN    "DB_Global".Entrada_A
+=     "DB_Global".Out_NOT
+
+// NAND
+A     "DB_Global".Entrada_A
+A     "DB_Global".Entrada_B
+NOT
+=     "DB_Global".Out_NAND
+
+// NOR
+O     "DB_Global".Entrada_A
+O     "DB_Global".Entrada_B
+NOT
+=     "DB_Global".Out_NOR
+
+// XOR
+X     "DB_Global".Entrada_A
+X     "DB_Global".Entrada_B
+=     "DB_Global".Out_XOR
+
+// XNOR
+X     "DB_Global".Entrada_A
+X     "DB_Global".Entrada_B
+NOT
+=     "DB_Global".Out_XNOR
+\end{lstlisting}
+
+\subsection{Comparación de lenguajes}
+
+La Tabla~\ref{tab:comparacion} resume la comparación cualitativa entre los cuatro lenguajes empleados, a partir de la implementación de las siete compuertas lógicas.
+
+\begin{table}[H]
+\centering
+\caption{Comparación de los lenguajes de programación IEC 61131-3}
+\label{tab:comparacion}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{|l|p{2.8cm}|p{2.8cm}|}
+\hline
+\textbf{Lenguaje} & \textbf{Ventajas} & \textbf{Limitaciones} \\
+\hline
+SCL & Legible, conciso; las siete compuertas caben en siete líneas de asignación & Requiere familiaridad con sintaxis textual tipo Pascal \\ \hline
+FUP & Intuitivo para lógica combinacional, cercano al álgebra booleana & Una red por compuerta; el diagrama crece linealmente con el número de compuertas \\ \hline
+KOP & Familiar para personal con formación eléctrica/electromecánica & XOR/XNOR requieren dos ramas paralelas, menos compactas que en SCL \\ \hline
+AWL & Máximo control sobre la ejecución y el acumulador (RLO) & Baja legibilidad; en desuso, deprecado en versiones recientes de TIA Portal \\ \hline
+\end{tabular}
+\end{table}
+
+\section{Simulación del Hardware}
+\label{sec:simulacion}
+
+Las siete salidas físicas de la CPU (\%Q0.0--\%Q0.6, Tabla~\ref{tab:io-fisico}) se representaron de forma virtual mediante el simulador FluidSim\textregistered, sin emplear hardware real en los bancos de trabajo, conforme a lo indicado en la guía de laboratorio. Cada salida se enlazó, a través del servidor OPC, con un indicador visual (lámpara) dentro del circuito de FluidSim\textregistered, permitiendo observar de forma directa el estado lógico correspondiente a cada combinación de entradas y a cada lenguaje activo. La Fig.~\ref{fig:fluidsim-wiring} muestra el diagrama de cableado del servidor OPC Kepware (\texttt{PTC.KepwareServer}), tag \texttt{FluidSIM In} sobre el dispositivo \texttt{simems.Device1.salidas}, enlazando los ocho canales de salida con las lámparas del circuito simulado; la Fig.~\ref{fig:fluidsim-wiring-dup} corresponde a una segunda captura del mismo diagrama, incluida para trazabilidad documental.
+
+\imgslot{01-fluidsim-wiring-diagram.jpeg}{4cm}{Diagrama de cableado OPC entre el servidor Kepware (\texttt{PTC.KepwareServer}, tag \texttt{FluidSIM In}) y las lámparas de salida del circuito simulado en FluidSim\textregistered.}{fig:fluidsim-wiring}
+
+\imgslot{01-fluidsim-wiring-diagram-dup.jpeg}{4cm}{Segunda captura del diagrama de cableado OPC de la Fig.~\ref{fig:fluidsim-wiring}.}{fig:fluidsim-wiring-dup}
+
+\section{Comunicación OPC y OPC UA}
+\label{sec:opc}
+
+La comunicación entre TIA Portal\textregistered\ y el entorno de simulación de hardware se estableció mediante dos mecanismos complementarios: un servidor OPC de terceros (Kepware/KEPServerEX) que expone las salidas físicas del PLC como tags accesibles desde FluidSim\textregistered\ (Fig.~\ref{fig:fluidsim-wiring}), y el servidor OPC~UA nativo de la CPU S7-1500, habilitado explícitamente en las propiedades del dispositivo. El procedimiento general se resume a continuación:
+
+\begin{enumerate}
+    \item Activación del servidor OPC~UA en las propiedades de la CPU (\emph{Accessibility of the server $\to$ Activate OPC UA server}), mostrada en la Fig.~\ref{fig:opcua-activation}.
+    \item Verificación del tipo de licencia de tiempo de ejecución requerida y adquirida para el servidor OPC~UA (\emph{SIMATIC OPC UA S7-1500 medium}), mostrada en la Fig.~\ref{fig:opcua-license}.
+    \item Configuración del servidor OPC Kepware con los tags correspondientes a las salidas físicas \%Q0.0--\%Q0.6 de la Tabla~\ref{tab:io-fisico}, bajo el dispositivo \texttt{simems.Device1.salidas}.
+    \item Vinculación de los mismos tags con las lámparas del circuito de FluidSim\textregistered, de forma que cada salida quede enlazada a la dirección física correspondiente del PLC.
+    \item Verificación de la comunicación en línea (\emph{online}), comprobando que la salida calculada por el lenguaje activo (según \texttt{Sel\_Lenguaje}) se refleje instantáneamente tanto en la HMI como en el indicador simulado correspondiente.
+\end{enumerate}
+
+\imgslot{12-opc-ua-server-activation.jpeg}{1.8cm}{Activación del servidor OPC~UA en las propiedades de la CPU S7-1500.}{fig:opcua-activation}
+
+\imgslot{12-opc-ua-license-type.jpeg}{1.8cm}{Tipo de licencia de tiempo de ejecución requerida/adquirida para el servidor OPC~UA (\emph{SIMATIC OPC UA S7-1500 medium}).}{fig:opcua-license}
+
+\section{Interfaz HMI}
+\label{sec:hmi}
+
+Se configuró una pantalla de visualización HMI (KTP700 Basic PN) con siete indicadores luminosos, uno por compuerta (AND, OR, NOT, NAND, NOR, XOR, XNOR), un selector desplegable del lenguaje activo (\texttt{Sel\_Lenguaje}) y dos interruptores para forzar las entradas A y B, según se observa en la Fig.~\ref{fig:hmi-design}. Esto permite validar de forma visual e inmediata la correcta ejecución de la lógica programada, en cualquiera de los cuatro lenguajes, sin necesidad de observar directamente los LED del PLC físico.
+
+\imgslot{10-hmi-design-screen.jpeg}{5cm}{Pantalla HMI (vista de diseño en TIA Portal): siete indicadores de salida, selector de lenguaje y switches de entrada A/B.}{fig:hmi-design}
+
+\section{Resultados}
+
+Se verificó la solución del problema planteado para las siete compuertas lógicas (AND, OR, NOT, NAND, NOR, XOR, XNOR), programadas de forma completa en los cuatro lenguajes IEC~61131-3 disponibles en TIA Portal\textregistered\ (SCL, FUP, KOP y AWL) dentro de un mismo proyecto con selección de lenguaje en tiempo de ejecución. La Tabla~\ref{tab:resultados} resume la verificación del comportamiento de cada compuerta frente a su tabla de verdad de referencia (Tabla~\ref{tab:verdad}), evaluada de forma consistente en los cuatro lenguajes mediante la conmutación de \texttt{Sel\_Lenguaje} mientras se observaba la HMI y el circuito simulado en FluidSim\textregistered.
+
+\begin{table}[H]
+\centering
+\caption{Verificación del comportamiento lógico obtenido por lenguaje}
+\label{tab:resultados}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\textbf{Compuerta} & \textbf{FUP} & \textbf{KOP} & \textbf{SCL} & \textbf{AWL} \\
+\hline
+AND  & Correcto & Correcto & Correcto & Correcto \\ \hline
+OR   & Correcto & Correcto & Correcto & Correcto \\ \hline
+NOT  & Correcto & Correcto & Correcto & Correcto \\ \hline
+NAND & Correcto & Correcto & Correcto & Correcto \\ \hline
+NOR  & Correcto & Correcto & Correcto & Correcto \\ \hline
+XOR  & Correcto & Correcto & Correcto & Correcto \\ \hline
+XNOR & Correcto & Correcto & Correcto & Correcto \\ \hline
+\end{tabular}
+\end{table}
+
+La Fig.~\ref{fig:hmi-runtime} muestra una captura del panel físico de la HMI en operación, con el lenguaje activo en \texttt{3: SCL} y ambas entradas A y B forzadas a \emph{OFF} (A=0, B=0). Bajo esta condición, la Tabla~\ref{tab:verdad} predice AND=0, OR=0, NOT(A)=1, NAND=1, NOR=1, XOR=0 y XNOR=1, lo cual coincide exactamente con los indicadores observados: los pilotos NOT, NAND, NOR y XNOR encendidos (verde) y los pilotos AND, OR y XOR apagados.
+
+\imgslot{13-hmi-physical-runtime.jpeg}{6cm}{HMI física KTP700 en operación: lenguaje activo \texttt{3: SCL}, entradas A=B=OFF; salidas NOT, NAND, NOR y XNOR en 1 (verde) y AND, OR, XOR en 0, conforme a la Tabla~\ref{tab:verdad}.}{fig:hmi-runtime}
+
+En todos los casos, la salida obtenida en el PLC (y su réplica en la HMI y en FluidSim\textregistered) coincidió con la tabla de verdad de referencia, tanto para las cuatro combinaciones posibles de entrada como para los cuatro lenguajes de programación disponibles mediante el selector \texttt{Sel\_Lenguaje}.
+
+\section{Análisis de Resultados}
+
+El desarrollo de la práctica permitió comprobar que, si bien los cuatro lenguajes de programación (SCL, FUP, KOP y AWL) producen exactamente el mismo comportamiento funcional en las salidas del PLC --dado que todos son compilados a un mismo código intermedio ejecutado por la CPU S7-1500--, difieren sustancialmente en legibilidad, mantenibilidad y extensión del código requerido para las siete compuertas. SCL resultó ser el lenguaje más compacto, condensando las siete compuertas en siete líneas de asignación (Listado~\ref{lst:scl}), incluyendo de forma directa las compuertas derivadas NAND, NOR y XNOR mediante negación de la expresión booleana correspondiente (Ecs.~\ref{eq:nand}-\ref{eq:nor} y \ref{eq:xnor}). FUP y KOP, en cambio, requirieron una red independiente por compuerta (Figs.~\ref{fig:fbd-grid} y~\ref{fig:lad-grid}), y en el caso de KOP las compuertas XOR y XNOR necesitaron dos ramas paralelas de contactos para representar la disyunción exclusiva.
+
+La arquitectura basada en un bloque de datos global (\texttt{DB\_Global}) y un selector de lenguaje evaluado en el OB1 (Figs.~\ref{fig:ob1-outputs} y~\ref{fig:ob1-selector}) demostró ser una estrategia efectiva para comparar los cuatro lenguajes sobre exactamente el mismo hardware simulado y las mismas condiciones de entrada, evitando las diferencias de configuración de E/S que introduciría mantener cuatro proyectos o cuatro conjuntos de direcciones físicas separados. El protocolo de comunicación utilizado para enlazar el simulador de hardware con el proyecto PLC fue OPC (servidor Kepware) complementado con el servidor OPC~UA nativo de la CPU, lo que evidenció en tiempo real la respuesta del sistema ante cada combinación de entradas y ante cada lenguaje seleccionado, sin incidencias de compilación ni de comunicación durante las pruebas.
+
+\section{Conclusiones}
+
+\begin{itemize}
+    \item La implementación de las siete compuertas lógicas (AND, OR, NOT, NAND, NOR, XOR, XNOR) en los cuatro lenguajes normalizados por IEC~61131-3 (SCL, FUP, KOP, AWL) confirmó que, aunque el resultado funcional es idéntico en las cuatro representaciones, la elección del lenguaje incide directamente en la legibilidad y en la extensión del código, siendo SCL el más compacto para expresar compuertas derivadas (NAND, NOR, XNOR) y KOP/FUP los más intuitivos para lógica combinacional simple.
+    \item Centralizar las entradas, salidas y el selector de lenguaje en un único bloque de datos global (\texttt{DB\_Global}), junto con un despacho condicional en el OB1 hacia cuatro bloques de función (uno por lenguaje), permitió alternar el lenguaje activo en tiempo de ejecución desde la HMI, facilitando una comparación directa y reproducible entre SCL, FUP, KOP y AWL.
+    \item La simulación del hardware en FluidSim\textregistered, sin uso de hardware físico en los bancos, permitió validar de forma segura y repetible el comportamiento de las siete compuertas ante todas las combinaciones posibles de entrada y ante los cuatro lenguajes de programación.
+    \item El uso combinado de un servidor OPC de terceros (Kepware) y del servidor OPC~UA nativo de la CPU S7-1500 demostró ser una estrategia efectiva para integrar software de distintos fabricantes, replicando en un entorno virtual el comportamiento que tendría el sistema frente a hardware de campo real.
+    \item La visualización de las salidas y del lenguaje activo mediante una interfaz HMI facilitó la validación inmediata de la lógica programada, sin depender exclusivamente de la observación directa de los indicadores LED del PLC.
+    \item El desarrollo de esta práctica fortaleció competencias fundamentales del ingeniero mecatrónico, tales como el manejo del entorno de desarrollo TIA Portal\textregistered, la comprensión de la norma IEC~61131-3 y el criterio de ingeniería para estructurar un proyecto de forma que múltiples lenguajes de programación puedan compararse sobre una misma base de datos y de hardware simulado.
+\end{itemize}
+
+\section{Preguntas para la Discusión}
+
+\textbf{¿Cuál es la importancia de las compuertas lógicas en la programación de PLC y cómo se aplican en procesos de automatización industrial reales?}
+Las compuertas lógicas constituyen los bloques elementales de decisión de cualquier sistema de control digital; en la práctica industrial se combinan para implementar enclavamientos de seguridad, permisivos de arranque, selección de modos de operación y condiciones de disparo de alarmas, entre otros, siendo la base sobre la cual se construyen lógicas de control mucho más complejas.
+
+\textbf{¿Qué diferencias se evidencian al implementar una misma compuerta lógica en los lenguajes KOP, FUP, SCL y AWL dentro de TIA Portal\textregistered?}
+Como se documentó en la Sección~\ref{sec:implementacion}, KOP y FUP son lenguajes gráficos cercanos a la representación eléctrica y booleana respectivamente, y requieren una red por compuerta; SCL es un lenguaje textual estructurado que condensa las siete compuertas en siete líneas, incluyendo de forma natural las compuertas derivadas (NAND, NOR, XNOR); y AWL, si bien ofrece control de bajo nivel sobre el acumulador RLO, resulta el menos legible de los cuatro y se encuentra en desuso en proyectos nuevos.
+
+\textbf{¿Qué ventajas y limitaciones presenta el uso de simuladores como FluidSim\textregistered\ frente al uso de hardware real?}
+Como ventaja, permiten validar la lógica de control sin riesgo eléctrico, sin desgaste de componentes físicos y con posibilidad de reconfiguración inmediata del circuito; como limitación, no reproducen completamente fenómenos físicos reales (ruido eléctrico, rebote de contactos, tiempos de respuesta de actuadores reales), por lo que la validación final de un sistema debe complementarse, cuando sea posible, con pruebas sobre hardware real.
+
+\textbf{¿Cuál es la función del protocolo OPC/OPC UA en esta práctica y por qué es importante para la comunicación entre el PLC y los entornos de simulación?}
+OPC y OPC~UA actúan como intermediarios estándar que permiten intercambiar datos entre el proyecto del PLC en TIA Portal\textregistered\ y el software de simulación de hardware, sin requerir que ambos provengan del mismo fabricante, lo cual es fundamental para poder interconectar plataformas heterogéneas como Siemens (PLC), Kepware (servidor OPC) y FluidSim\textregistered\ (simulación).
+
+\textbf{¿Cómo influyen el tipo de entradas y salidas digitales del PLC en el correcto funcionamiento de la lógica programada?}
+Al tratarse de señales binarias (\texttt{Bool}) directamente mapeadas a variables del \texttt{DB\_Global} y, en el caso de las salidas, a bits de los bytes de salida física del PLC (\%Q0.x), la lógica programada responde de forma inmediata a los cambios de estado; un mapeo incorrecto entre las salidas del DB global y las direcciones físicas (Tabla~\ref{tab:io-fisico}) produciría que la HMI o FluidSim\textregistered\ mostraran el estado de una compuerta distinta a la esperada, por lo que la asignación ordenada realizada en el OB1 resultó fundamental para evitar dicho conflicto.
+
+\textbf{¿Qué errores comunes pueden presentarse durante la configuración del PLC y la comunicación OPC/OPC UA, y cómo pueden identificarse y corregirse?}
+Entre los errores más comunes se encuentran: direcciones de PLC no coincidentes entre TIA Portal\textregistered\ y los tags configurados en el servidor OPC Kepware; el servidor OPC~UA no habilitado en las propiedades de la CPU o con un tipo de licencia insuficiente para el proyecto; bloques de función no llamados desde el OB1 (por ejemplo, si la comparación de \texttt{Sel\_Lenguaje} no cubre el valor seleccionado, por lo que ningún bloque se ejecuta); y falta de sincronización cuando el proyecto PLC no está en línea o en modo RUN. Estos errores se identifican mediante la tabla de observación (\emph{watch table}) de TIA Portal\textregistered\ y el estado de conexión reportado por el servidor OPC, y se corrigen verificando la coincidencia exacta de direcciones, la licencia OPC~UA activa y el correcto llamado condicional de los bloques.
+
+\textbf{¿De qué manera la visualización de las salidas en la HMI contribuye a la validación y diagnóstico del programa implementado?}
+La HMI permite observar de forma centralizada, en tiempo real y sin necesidad de acceso físico al PLC, el estado de las siete salidas lógicas y del lenguaje activo simultáneamente, facilitando detectar de forma inmediata si una compuerta no responde según lo esperado en alguno de los cuatro lenguajes, y agilizando el diagnóstico durante la etapa de sustentación de la práctica.
+
+\bibliographystyle{IEEEtran}
+\begin{thebibliography}{9}
+
+\bibitem{john_tiegelkamp}
+K.-H. John and M. Tiegelkamp, \textit{Programming Industrial Automation Systems: Concepts and Programming}, Springer, 2010.
+
+\bibitem{berger_step7}
+H. Berger, \textit{Automating with STEP 7 in STL and SCL: SIMATIC S7-300/400 Programmable Controllers}, Publicis Publishing, 2012.
+
+\bibitem{iec61131_3}
+International Electrotechnical Commission, \textit{IEC 61131-3: Programmable Controllers -- Part 3: Programming Languages}, IEC, Geneva, 2013.
+
+\bibitem{groove_automation}
+M. P. Groover, \textit{Automation, Production Systems, and Computer-Integrated Manufacturing}, 4th ed., Pearson, 2015.
+
+\bibitem{morris_measurement}
+A. Morris, \textit{Measurement and Instrumentation: Theory and Application}, Butterworth-Heinemann, 2012.
+
+\bibitem{marshall_industrial_ethernet}
+P. S. Marshall and J. S. Rinaldi, \textit{Industrial Ethernet}, 2nd ed., ISA, 2004.
+
+\bibitem{anderson_industrial_network}
+G. D. Anderson, \textit{Industrial Network Basics: Practical Guides for the Industrial Technician}, Cengage Learning, 2003.
+
+\bibitem{zurawski_industrial_comm}
+R. Zurawski, \textit{Industrial Communication Technology Handbook}, 2nd ed., CRC Press, 2014.
+
+\bibitem{balcells_automatas}
+J. Balcells, \textit{Autómatas programables}, Marcombo Editores, 1997.
+
+\bibitem{martinez_automatizacion}
+V. A. Martínez Sánchez, \textit{Curso completo de automatización industrial moderna}, Alfaomega, Bogotá.
+
+\bibitem{morcillo_comunicaciones}
+P. Morcillo Ruiz, \textit{Comunicaciones industriales}, Paraninfo, Thomson Learning, Madrid, 2000.
+
+\bibitem{mandado_automatas}
+E. Mandado, \textit{Autómatas Programables}, Marcombo, 2009.
+
+\end{thebibliography}
+
+\section*{Anexo: Listado Consolidado de la Lógica de Control}
+
+El listado siguiente consolida, en notación SCL, la lógica de las siete compuertas lógicas implementadas en el bloque \texttt{FC\_SCL} de esta práctica, para referencia y trazabilidad de todas las variables empleadas del \texttt{DB\_Global}. Las capturas reales del entorno (bloque de datos global, redes del OB1, editores FUP/KOP/SCL/AWL, diagrama de cableado OPC de FluidSim\textregistered, configuración de OPC~UA y pantallas HMI de diseño y de operación) se presentan en las secciones correspondientes.
+
+\begin{lstlisting}[language=Pascal, caption={Bloque FC\_SCL -- las siete compuertas lógicas sobre DB\_Global}, label={lst:consolidado}]
+// =====================================================================
+// FC_SCL - Implementacion SCL de las siete compuertas logicas
+// Plataforma: Siemens S7-1500 / TIA Portal
+// Invocado desde OB1 cuando DB_Global.Sel_Lenguaje = 3
+// =====================================================================
+
+"DB_Global".Out_AND  := "DB_Global".Entrada_A AND "DB_Global".Entrada_B;
+"DB_Global".Out_OR   := "DB_Global".Entrada_A OR  "DB_Global".Entrada_B;
+"DB_Global".Out_NOT  := NOT "DB_Global".Entrada_A;
+"DB_Global".Out_NAND := NOT ("DB_Global".Entrada_A AND "DB_Global".Entrada_B);
+"DB_Global".Out_NOR  := NOT ("DB_Global".Entrada_A OR  "DB_Global".Entrada_B);
+"DB_Global".Out_XOR  := "DB_Global".Entrada_A XOR "DB_Global".Entrada_B;
+"DB_Global".Out_XNOR := NOT ("DB_Global".Entrada_A XOR "DB_Global".Entrada_B);
+
+// OB1 (extracto) - mapeo de salidas fisicas
+// "DB_Global".Out_AND  -> %Q0.0
+// "DB_Global".Out_NAND -> %Q0.1
+// "DB_Global".Out_NOR  -> %Q0.2
+// "DB_Global".Out_NOT  -> %Q0.3
+// "DB_Global".Out_OR   -> %Q0.4
+// "DB_Global".Out_XNOR -> %Q0.5
+// "DB_Global".Out_XOR  -> %Q0.6
+\end{lstlisting}
+
+\end{document}
