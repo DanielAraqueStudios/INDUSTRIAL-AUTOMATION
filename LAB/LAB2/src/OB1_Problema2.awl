@@ -1,0 +1,18 @@
+// =============================================================================
+// OB1 (Program cycle) — Problema 2
+// Contiene UNA sola línea: la llamada al DB de instancia del FB. Ninguna
+// lógica vive aquí — toda la lógica y las variables internas están en
+// FB_Alimentador (ver Problema2_AWL.awl).
+// =============================================================================
+
+FUNCTION_BLOCK "Main" : Void
+{ S7_Optimized_Access := 'TRUE' }
+
+BEGIN
+
+NETWORK
+TITLE = Llamada al alimentador de piezas (Problema 2)
+
+      CALL  "FB_Alimentador_DB"
+
+END_FUNCTION_BLOCK

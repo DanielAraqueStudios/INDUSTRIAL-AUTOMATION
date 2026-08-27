@@ -1,0 +1,359 @@
+// =============================================================================
+// FB_Alimentador  —  Problema 2: Alimentador de piezas (S7-1500)
+// Lenguaje: AWL (STL) EXCLUSIVAMENTE — restricción del enunciado. No CALCULATE.
+// No se usan temporizadores (TON/TOF/TP) ni contadores (CTU/CTD/CTUD).
+// El tiempo se maneja con tipos de dato de tiempo del PLC (DTL/Time) mediante
+// las instrucciones de sistema RD_SYS_T y T_DIFF (fecha y hora, NO temporizador).
+//
+// Equivalente conceptual en SCL (no usable aquí por restricción del enunciado):
+// un CASE #Paso_Actual OF 0..10 dentro de este mismo FB, con la misma máquina
+// de estados. Se deja documentado solo como referencia de estilo.
+//
+// ARQUITECTURA DEL PROYECTO (aplica a todo el laboratorio):
+//   - Tabla de Tags  -> SOLO E/S físicas (ver TagTable_Problema2.md).
+//   - Este FB        -> TODA la lógica y TODAS las variables internas
+//                        (Paso_Actual, marcas de tiempo, banderas, constantes).
+//                        Es memoria estática de su DB de instancia
+//                        "FB_Alimentador_DB" -> persiste entre ciclos de scan.
+//   - OB1            -> una sola línea: CALL "FB_Alimentador_DB" (ver
+//                        OB1_Problema2.awl). Ninguna lógica vive en OB1.
+//   - HMI (opcional) -> enlaza directo a "FB_Alimentador_DB".<tag> y a la
+//                        Tag Table física. No hay DB global aparte.
+//
+// Todo el programa vive en un único NETWORK (a pedido del usuario). NETWORK
+// es solo un delimitador organizativo en AWL/TIA Portal, no una unidad de
+// ejecución: las etiquetas de salto (M001, P0_END, P1_FALLA, ...) son
+// únicas a nivel de bloque, no por network, así que el comportamiento es
+// idéntico a la versión multi-network anterior. Se usan comentarios // para
+// separar secciones en su lugar.
+//
+// Requiere habilitar "AWL/STL" como lenguaje opcional del proyecto en TIA Portal
+// (Configuración del proyecto > Idiomas de programación adicionales).
+//
+// Variables físicas (E/S): ver TagTable_Problema2.md.
+// Direcciones %I/%Q son PLACEHOLDER — ajustar al módulo posterior real.
+//
+// PENDIENTE (ver LAB/LAB2/docs/README_Pos1_Pos2_decision.md y memoria de
+// proyecto): qué condición del proceso elige la ruta A+B (Pos.1) vs A+B+C
+// (Pos.2). Los pasos 1-4 de abajo aún usan el supuesto de cascada A->B->C
+// para una sola pieza, marcado como INCORRECTO a la luz de la Figura 2 del
+// enunciado. Reescribir en cuanto el usuario elija una de las 3 opciones.
+// =============================================================================
+
+FUNCTION_BLOCK "FB_Alimentador"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+
+VAR CONSTANT
+      Periodo_Ciclo : Time := T#45s;   // periodo minimo entre inicios de ciclo
+END_VAR
+
+VAR
+      Paso_Actual                : Int;   // 0 reposo ... 10 falla (ver mapa de pasos abajo)
+      Marca_Inicio_Ciclo         : DTL;   // timestamp capturado al iniciar el ciclo
+      Marca_Actual               : DTL;   // timestamp leido en el scan actual
+      Tiempo_Transcurrido_Ciclo  : Time;  // T_DIFF(Marca_Actual, Marca_Inicio_Ciclo)
+      RetVal_RDSYST              : Int;   // RET_VAL de RD_SYS_T
+      Falla_Activa               : Bool;  // enclavamiento de falla de inspeccion
+      Flanco_S1_Ant               : Bool;  // memoria de flanco de I_S1_CintaAlimenta
+      Pulso_S1                   : Bool;  // pulso de 1 scan en el flanco de subida de S1
+      HMI_Paso_Actual             : Int;   // copia de Paso_Actual para HMI
+      HMI_Tiempo_Transcurrido_ms   : Real;  // paso intermedio de T_CONV (ms)
+      HMI_Tiempo_Transcurrido_s    : Real;  // tiempo transcurrido del ciclo, en s, para HMI
+END_VAR
+
+BEGIN
+
+NETWORK
+TITLE = FB_Alimentador - Programa completo (un solo network)
+
+// -----------------------------------------------------------------------
+// Enclavamiento general — Emergencia / Stop
+// Si hay Emergencia: corta todas las salidas de fuerza y fuerza Paso 9.
+// -----------------------------------------------------------------------
+      U     "I_Emergency"
+      SPB   M001
+      SPA   M002
+
+M001: L     9
+      T     #Paso_Actual
+      U     "I_Emergency"
+      =     "Q_Falla"
+
+      // Todas las salidas de fuerza a 0 en emergencia
+      U     "I_Emergency"
+      SPBN  M004
+M003: R     "Q_CilA_Avanza"
+      R     "Q_CilB_Avanza"
+      R     "Q_CilC_Avanza"
+      R     "Q_Electroiman"
+      R     "Q_Lampara_Electroiman"
+M004: NOP 0
+M002: NOP 0
+
+// -----------------------------------------------------------------------
+// Detección de flanco de subida de S1 (dispara el ciclo)
+// -----------------------------------------------------------------------
+      U     "I_S1_CintaAlimenta"
+      UN    #Flanco_S1_Ant
+      =     #Pulso_S1                  // pulso de 1 ciclo de scan
+
+      U     "I_S1_CintaAlimenta"
+      =     #Flanco_S1_Ant
+
+// -----------------------------------------------------------------------
+// Lectura de reloj del sistema y cálculo de tiempo transcurrido
+// (sustituye a un temporizador: se usa Time/DTL, no TON/TP)
+// -----------------------------------------------------------------------
+      CALL  "RD_SYS_T"
+       RET_VAL := #RetVal_RDSYST
+       OUT      := #Marca_Actual
+
+      CALL  "T_DIFF"
+       IN1 := #Marca_Actual
+       IN2 := #Marca_Inicio_Ciclo
+       RET_VAL := #Tiempo_Transcurrido_Ciclo
+
+// -----------------------------------------------------------------------
+// Secuenciador principal — máquina de estados por Paso_Actual
+// Pasos:
+//   0 Reposo / espera de disparo         5 Retroceso C
+//   1 Avance A (a Posicion 1)            6 Retroceso B
+//   2 Avance B (a Posicion 1)            7 Retroceso A -> fin de ciclo
+//   3 Avance C (a Posicion 2)            8 Espera de periodo (45 s) antes de rearmar
+//   4 Liberacion de electroiman           9 Emergencia (forzado arriba)
+//                                        10 Falla de inspeccion (pieza perdida)
+// -----------------------------------------------------------------------
+
+// --- Paso 0 - Reposo, espera de disparo de ciclo ---
+      L     #Paso_Actual
+      L     0
+      ==I
+      SPBN  P0_END
+
+      U     "I_Start"
+      UN    "I_Stop"
+      UN    "I_Emergency"
+      UN    #Falla_Activa
+      U     #Pulso_S1
+      U     "I_S2_DetectaPieza"
+      SPBN  P0_END
+
+      // Captura la marca de inicio de ciclo (referencia de los 45 s)
+      CALL  "RD_SYS_T"
+       RET_VAL := #RetVal_RDSYST
+       OUT      := #Marca_Inicio_Ciclo
+
+      L     1
+      T     #Paso_Actual
+
+P0_END: NOP 0
+
+// --- Paso 1 - Avance cilindro A hacia Posicion 1 ---
+      L     #Paso_Actual
+      L     1
+      ==I
+      SPBN  P1_END
+
+      S     "Q_CilA_Avanza"
+      S     "Q_Electroiman"
+      S     "Q_Lampara_Electroiman"
+
+      U     "I_S2_DetectaPieza"
+      SPBN  P1_FALLA
+
+      U     "I_SensorA_Pos1"
+      SPBN  P1_END
+
+      L     2
+      T     #Paso_Actual
+      SPA   P1_END
+
+P1_FALLA: L 10
+      T     #Paso_Actual
+P1_END: NOP 0
+
+// --- Paso 2 - Avance cilindro B hacia Posicion 1 ---
+      L     #Paso_Actual
+      L     2
+      ==I
+      SPBN  P2_END
+
+      S     "Q_CilB_Avanza"
+
+      U     "I_S2_DetectaPieza"
+      SPBN  P2_FALLA
+
+      U     "I_SensorA_Pos1"
+      U     "I_SensorB_Pos1"
+      SPBN  P2_END
+
+      L     3
+      T     #Paso_Actual
+      SPA   P2_END
+
+P2_FALLA: L 10
+      T     #Paso_Actual
+P2_END: NOP 0
+
+// --- Paso 3 - Avance cilindro C hacia Posicion 2 (A y B se mantienen) ---
+      L     #Paso_Actual
+      L     3
+      ==I
+      SPBN  P3_END
+
+      S     "Q_CilC_Avanza"
+
+      U     "I_S2_DetectaPieza"
+      SPBN  P3_FALLA
+
+      U     "I_SensorC_Pos2"
+      SPBN  P3_END
+
+      L     4
+      T     #Paso_Actual
+      SPA   P3_END
+
+P3_FALLA: L 10
+      T     #Paso_Actual
+P3_END: NOP 0
+
+// --- Paso 4 - Posicion 2 alcanzada: liberar electroiman ---
+      L     #Paso_Actual
+      L     4
+      ==I
+      SPBN  P4_END
+
+      R     "Q_Electroiman"
+      R     "Q_Lampara_Electroiman"
+
+      L     5
+      T     #Paso_Actual
+P4_END: NOP 0
+
+// --- Paso 5 - Retroceso cilindro C ---
+      L     #Paso_Actual
+      L     5
+      ==I
+      SPBN  P5_END
+
+      R     "Q_CilC_Avanza"
+
+      U     "I_SensorC_Home"
+      SPBN  P5_END
+
+      L     6
+      T     #Paso_Actual
+P5_END: NOP 0
+
+// --- Paso 6 - Retroceso cilindro B ---
+      L     #Paso_Actual
+      L     6
+      ==I
+      SPBN  P6_END
+
+      R     "Q_CilB_Avanza"
+
+      U     "I_SensorB_Home"
+      SPBN  P6_END
+
+      L     7
+      T     #Paso_Actual
+P6_END: NOP 0
+
+// --- Paso 7 - Retroceso cilindro A (fin de movimiento) ---
+      L     #Paso_Actual
+      L     7
+      ==I
+      SPBN  P7_END
+
+      R     "Q_CilA_Avanza"
+
+      U     "I_SensorA_Home"
+      SPBN  P7_END
+
+      L     8
+      T     #Paso_Actual
+P7_END: NOP 0
+
+// --- Paso 8 - Espera de periodo minimo de 45 s antes de rearmar ---
+      L     #Paso_Actual
+      L     8
+      ==I
+      SPBN  P8_END
+
+      L     #Tiempo_Transcurrido_Ciclo
+      L     #Periodo_Ciclo               // T#45s
+      >=D
+      SPBN  P8_END
+
+      L     0
+      T     #Paso_Actual
+P8_END: NOP 0
+
+// --- Paso 9 - Rearme tras Emergencia ---
+      L     #Paso_Actual
+      L     9
+      ==I
+      SPBN  P9_END
+
+      UN    "I_Emergency"
+      U     "I_Start"
+      U     "I_SensorA_Home"
+      U     "I_SensorB_Home"
+      U     "I_SensorC_Home"
+      SPBN  P9_END
+
+      R     "Q_Falla"
+      L     0
+      T     #Paso_Actual
+P9_END: NOP 0
+
+// --- Paso 10 - Falla de inspeccion: retorno seguro a Home ---
+      L     #Paso_Actual
+      L     10
+      ==I
+      SPBN  P10_END
+
+      S     #Falla_Activa
+      S     "Q_Falla"
+      R     "Q_Electroiman"
+      R     "Q_Lampara_Electroiman"
+      R     "Q_CilC_Avanza"
+      R     "Q_CilB_Avanza"
+      R     "Q_CilA_Avanza"
+
+      U     "I_SensorC_Home"
+      U     "I_SensorB_Home"
+      U     "I_SensorA_Home"
+      UN    #Falla_Activa
+      SPBN  P10_HOLD
+      SPA   P10_END
+
+P10_HOLD: U "I_Reset_Falla"
+      SPBN  P10_END
+
+      R     #Falla_Activa
+      R     "Q_Falla"
+      L     0
+      T     #Paso_Actual
+P10_END: NOP 0
+
+// -----------------------------------------------------------------------
+// Espejo de tags para HMI
+// -----------------------------------------------------------------------
+      L     #Paso_Actual
+      T     #HMI_Paso_Actual
+
+      // Time se almacena internamente como DInt en milisegundos.
+      // Se convierte a Real (ms) y se divide entre 1000.0 para mostrar segundos en HMI.
+      CALL  "T_CONV"
+       IN  := #Tiempo_Transcurrido_Ciclo
+       OUT := #HMI_Tiempo_Transcurrido_ms   // Real, milisegundos
+
+      L     #HMI_Tiempo_Transcurrido_ms
+      L     1.0E+003
+      /R
+      T     #HMI_Tiempo_Transcurrido_s
+
+END_FUNCTION_BLOCK
