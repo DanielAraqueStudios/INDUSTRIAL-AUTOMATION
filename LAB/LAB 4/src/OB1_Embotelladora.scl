@@ -1,0 +1,8 @@
+ORGANIZATION_BLOCK "Main"
+{ S7_Optimized_Access := 'TRUE' }
+
+BEGIN
+
+"FB_Embotelladora_DB"();
+
+END_ORGANIZATION_BLOCK

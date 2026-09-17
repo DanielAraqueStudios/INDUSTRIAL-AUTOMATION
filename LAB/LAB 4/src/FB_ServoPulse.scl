@@ -1,0 +1,69 @@
+// FB_ServoPulse — body only.
+// TIA's block editor already knows this is FUNCTION_BLOCK
+// "FB_ServoPulse" from the interface table; do NOT type FUNCTION_BLOCK,
+// VAR/END_VAR, BEGIN, or END_FUNCTION_BLOCK in the code pane.
+//
+// Deliberate deviation: pulse generation done in SCL, not AWL as the
+// assignment specifies — explicit user decision.
+//
+// Static variables needed (declare in the interface table, Static section):
+//   Advance          : Bool             // one-shot command: move one index
+//   PrevAdvance      : Bool             // edge detection on Advance
+//   Moving           : Bool             // latched while a move is in progress
+//   ClockTimer       : TP               // toggle clock (fixed period)
+//   ClockPeriod      : Time := T#10ms   // pulse half-period (placeholder rate)
+//   PulseState       : Bool             // current output level, toggled each clock tick
+//   PulseCounter     : CTU              // counts completed pulses
+//   Preset_Pulses    : Int := 80        // pulses per index (see TagTable_Servo.md calc)
+//
+// Temp variable needed (declare in the interface table, Temp section —
+// not typed as VAR_TEMP text here):
+//   StartMove : Bool     // scratch value, recomputed fresh every scan
+//
+// Logic:
+// - Advance (one-shot, edge-triggered) latches Moving TRUE and resets the
+//   pulse counter for a new move.
+// - While Moving and no servo fault, ClockTimer free-runs (self-retrigger,
+//   same pattern as FB_Embotelladora's fill timer) toggling PulseState
+//   each time it completes — this IS the pulse train.
+// - Each toggle-to-TRUE edge of PulseState increments PulseCounter.
+// - Once PulseCounter.CV >= Preset_Pulses, Moving clears and Q_Positioned
+//   goes TRUE.
+// - I_ServoFault immediately halts pulsing (Moving forced FALSE) and
+//   raises Q_ServoAlarm — this is the "if servo faults, suspend everything"
+//   requirement.
+
+IF "I_ServoFault" THEN
+    #Moving := FALSE;
+END_IF;
+
+#StartMove := #Advance AND NOT #PrevAdvance AND NOT "I_ServoFault" AND "I_ServoReady";
+IF #StartMove THEN
+    #Moving := TRUE;
+END_IF;
+#PrevAdvance := #Advance;
+
+// Self-retriggering clock: same pattern as the fill timer in
+// FB_Embotelladora — produces a repeating toggle while Moving is TRUE.
+#ClockTimer(IN := #Moving AND NOT #ClockTimer.Q,
+            PT := #ClockPeriod);
+IF #ClockTimer.Q THEN
+    #PulseState := NOT #PulseState;
+END_IF;
+
+// Single counter call per scan. R (reset) fires on a fresh Advance
+// command (starts the count over for the new move) or on fault.
+// CU is edge-sensitive internally (IEC CTU triggers only on CU's
+// low-to-high transition), so feeding it a level signal is safe — it
+// won't double-count while PulseState stays TRUE for a whole half-period.
+#PulseCounter(CU := #PulseState AND #Moving,
+              R  := #StartMove OR "I_ServoFault",
+              PV := #Preset_Pulses);
+
+IF #PulseCounter.CV >= #Preset_Pulses THEN
+    #Moving := FALSE;
+END_IF;
+
+"Q_ServoPulse" := #PulseState AND #Moving;
+"Q_Positioned" := #PulseCounter.QU;
+"Q_ServoAlarm" := "I_ServoFault";

@@ -1,0 +1,94 @@
+// FB_ServoPulse_AWL — body only, language STL/AWL.
+// This is the ASSIGNMENT-COMPLIANT version ("el pulso debe generarse en
+// AWL"). FB_ServoPulse.scl is the deliberate SCL deviation kept for
+// comparison; use THIS file for the actual submission's pulse block.
+//
+// TIA's block editor already knows this is FUNCTION_BLOCK
+// "FB_ServoPulse_AWL" from the interface table; do NOT type
+// FUNCTION_BLOCK/VAR/END_VAR/BEGIN/END_FUNCTION_BLOCK here — only the
+// statement list below.
+//
+// Static variables (interface table, Static section) — same as the SCL
+// version:
+//   Advance          : Bool
+//   PrevAdvance      : Bool
+//   Moving           : Bool
+//   ClockTimer       : TP
+//   ClockPeriod      : Time := T#10ms
+//   PulseState       : Bool
+//   PulseCounter     : CTU
+//   Preset_Pulses    : Int  := 80
+//
+// Temp variables (interface table, Temp section):
+//   StartMove : Bool   // Advance rising-edge AND ready conditions
+//   ClockIn   : Bool   // computed IN for ClockTimer call
+//   PulseCU   : Bool   // computed CU for PulseCounter call
+//   PulseR    : Bool   // computed R for PulseCounter call
+//
+// STL basics used: U/UN (AND/AND NOT), O (OR), S/R (set/reset), = (assign
+// RLO to a bit), L/T (load/transfer accumulator), >=I (integer compare,
+// result becomes RLO), CALL (invoke a function block instance with named
+// parameters — same call syntax works in STL as in SCL), JCN (jump if
+// RLO=0), NOP 0 (no-op, used as a jump label target).
+
+// I_ServoFault immediately halts movement.
+      U     "I_ServoFault";
+      R     #Moving;
+
+// StartMove := Advance AND NOT PrevAdvance AND NOT I_ServoFault AND I_ServoReady
+      U     #Advance;
+      UN    #PrevAdvance;
+      UN    "I_ServoFault";
+      U     "I_ServoReady";
+      =     #StartMove;
+
+// IF StartMove THEN Moving := TRUE
+      U     #StartMove;
+      S     #Moving;
+
+// PrevAdvance := Advance
+      U     #Advance;
+      =     #PrevAdvance;
+
+// ClockIn := Moving AND NOT ClockTimer.Q  (self-retriggering clock input)
+      U     #Moving;
+      UN    #ClockTimer.Q;
+      =     #ClockIn;
+
+      CALL  #ClockTimer, IN := #ClockIn, PT := #ClockPeriod;
+
+// IF ClockTimer.Q THEN PulseState := NOT PulseState  (toggle on each tick)
+      U     #ClockTimer.Q;
+      JCN   M001;
+      UN    #PulseState;
+      =     #PulseState;
+M001: NOP   0;
+
+// PulseCU := PulseState AND Moving
+      U     #PulseState;
+      U     #Moving;
+      =     #PulseCU;
+
+// PulseR := StartMove OR I_ServoFault
+      U     #StartMove;
+      O     "I_ServoFault";
+      =     #PulseR;
+
+      CALL  #PulseCounter, CU := #PulseCU, R := #PulseR, PV := #Preset_Pulses;
+
+// IF PulseCounter.CV >= Preset_Pulses THEN Moving := FALSE
+      L     #PulseCounter.CV;
+      L     #Preset_Pulses;
+      >=I   ;
+      R     #Moving;
+
+// Outputs
+      U     #PulseState;
+      U     #Moving;
+      =     "Q_ServoPulse";
+
+      U     #PulseCounter.QU;
+      =     "Q_Positioned";
+
+      U     "I_ServoFault";
+      =     "Q_ServoAlarm";

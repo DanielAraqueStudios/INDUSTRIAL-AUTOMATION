@@ -1,0 +1,66 @@
+// FB_Embotelladora — body only.
+// TIA's block editor already knows this is FUNCTION_BLOCK
+// "FB_Embotelladora" from the interface table; do NOT type
+// FUNCTION_BLOCK, VAR/END_VAR, BEGIN, or END_FUNCTION_BLOCK in the code
+// pane — paste/type only the statements below. Declare all Static
+// variables via the interface table's Static section first (see list
+// below).
+//
+// Static variables needed (declare in the interface table, Static section):
+//   Running       : Bool                  // latched by Start, cleared by Stop/EStop/Done
+//   PrevFillQ     : Bool                  // for edge detection on Timer_Fill.Q
+//   Timer_Fill    : TON                   // 3s fill timer, self-retriggering
+//   Preset_Fill   : Time  := T#3s         // fill time per bottle
+//   Counter_Bottles : CTU                 // counts completed fills
+//   Preset_Bottles  : Int := 17           // target bottle count (from ID digits)
+//
+// Logic:
+// - I_Start latches Running TRUE. I_Stop clears Running gracefully (only
+//   takes effect once Timer_Fill is not mid-cycle... for this SCL-only
+//   scope, Stop clears Running directly, same as EStop, but kept as a
+//   separate input/path so the GRAFCET layer (built later) can insert a
+//   "finish current step first" condition without changing this FB).
+// - I_EStop clears Running immediately, unconditionally, every scan.
+// - Timer_Fill self-retriggers while Running: when it finishes (Q true),
+//   it's forced to reset for one scan, then restarts automatically —
+//   producing a repeating 3s cycle without needing GRAFCET/delay.
+// - Each rising edge of Timer_Fill.Q increments Counter_Bottles by one.
+// - Once Counter_Bottles.CV >= Preset_Bottles, Running clears (Done).
+
+IF "I_Start" THEN
+    #Running := TRUE;
+END_IF;
+
+IF "I_Stop" OR "I_EStop" THEN
+    #Running := FALSE;
+END_IF;
+
+// NOTE (learned in LAB3): TIA's counter type has no plain "Q" member,
+// only "QU"/"QD" (CTU/CTD/CTUD share one underlying structure) —
+// confirmed via compiler autocomplete. Use .QU here.
+IF #Counter_Bottles.QU THEN
+    #Running := FALSE;
+END_IF;
+
+// Self-retriggering 3s fill timer: force IN false for one scan right
+// after Q goes true (auto-reset), then it restarts automatically next
+// scan since Running is still TRUE — producing a repeating cycle.
+#Timer_Fill(IN := #Running AND NOT #Timer_Fill.Q,
+            PT := #Preset_Fill);
+
+// Edge-detect Timer_Fill.Q to pulse the counter exactly once per
+// completed fill (not every scan while Q stays true).
+IF #Timer_Fill.Q AND NOT #PrevFillQ THEN
+    #Counter_Bottles(CU := TRUE,
+                      R  := "I_EStop",
+                      PV := #Preset_Bottles);
+ELSE
+    #Counter_Bottles(CU := FALSE,
+                      R  := "I_EStop",
+                      PV := #Preset_Bottles);
+END_IF;
+#PrevFillQ := #Timer_Fill.Q;
+
+"Q_Fill"    := #Timer_Fill.IN;
+"Q_Running" := #Running;
+"Q_Done"    := #Counter_Bottles.QU;

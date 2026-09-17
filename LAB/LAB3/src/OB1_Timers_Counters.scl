@@ -1,0 +1,10 @@
+ORGANIZATION_BLOCK "Main"
+{ S7_Optimized_Access := 'TRUE' }
+// LAB3 — program cycle OB. Exactly one call, no logic here (per
+// tia-portal-project-architecture).
+
+BEGIN
+
+"FB_Timers_Counters_DB"();
+
+END_ORGANIZATION_BLOCK

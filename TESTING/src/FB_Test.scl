@@ -1,0 +1,14 @@
+// FB_Test — body only.
+// TIA's block editor already knows this is FUNCTION_BLOCK "FB_Test" from
+// the interface table (Input/Output rows); do NOT type FUNCTION_BLOCK,
+// BEGIN, or END_FUNCTION_BLOCK in the code pane.
+//
+// Static section (add via the interface table, not typed here as VAR
+// text): two HMI-only triggers, no physical equivalent.
+//   HMI_Button1 : Bool;
+//   HMI_Button2 : Bool;
+//
+// Two independent channels, each dual-driven (physical OR HMI).
+
+"Q_Test1" := "I_Test1" OR #HMI_Button1;
+"Q_Test2" := "I_Test2" OR #HMI_Button2;

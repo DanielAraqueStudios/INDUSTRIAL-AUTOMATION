@@ -1,0 +1,86 @@
+// FB_Timers_Counters — body only.
+// TIA's block editor already knows this is FUNCTION_BLOCK
+// "FB_Timers_Counters" from the interface table; do NOT type
+// FUNCTION_BLOCK, VAR/END_VAR, BEGIN, or END_FUNCTION_BLOCK in the code
+// pane — paste/type only the statements below. Declare all Static
+// variables (listed in docs/README_PLC_Tags.md) via the interface table's
+// Static section first.
+//
+// Dual-driven: every trigger (Start/CU/CD/Reset/Load) can come from a
+// physical input OR its HMI memory-tag counterpart (both live in the PLC
+// tags table, TagTable_Timers_Counters.md, OR'd together below) — either
+// path fires the same block. Outputs (Q/QU/QD) are written to physical
+// %Q tags, which the HMI status circles bind to directly, so there's one
+// source of truth for state.
+//
+// NOTE 1: plain TON/TOF/TP (resolved to TON_TIME/TOF_TIME/TP_TIME) have
+// NO "R" (Reset) input in this TIA/S7-1500 library version — confirmed by
+// compiler ("formal parameter 'R' is invalid"). Reset is folded into IN
+// instead: IN := Start AND NOT Reset. Caveat: this resets TON instantly,
+// delays TOF's Q drop by PT after Reset is pressed, and cannot interrupt
+// an already-running TP pulse (TP ignores IN once triggered).
+// NOTE 2: CTD/CTUD's Load input formal parameter is named "LD" in TIA/
+// S7-1500 SCL, not "LOAD" — using "LOAD" fails to compile.
+
+#Preset_TON := DINT_TO_TIME(REAL_TO_DINT(#HMI_PT_TON_s * 1000.0));
+#Preset_TOF := DINT_TO_TIME(REAL_TO_DINT(#HMI_PT_TOF_s * 1000.0));
+#Preset_TP := DINT_TO_TIME(REAL_TO_DINT(#HMI_PT_TP_s * 1000.0));
+
+// TON — Timer On-Delay: Q_TON goes TRUE once Start (physical OR HMI
+// memory tag) has been held TRUE for Preset_TON. Reset forces IN false,
+// which instantly zeroes ET/Q.
+#Timer_TON(IN := ("I_Start_TON" OR "HMI_Start_TON") AND NOT ("I_Reset_TON" OR "HMI_Reset_TON"),
+           PT := #Preset_TON);
+"Q_TON" := #Timer_TON.Q;
+#HMI_ET_TON_s := TIME_TO_DINT(#Timer_TON.ET) / 1.0E+003;
+
+// TOF — Timer Off-Delay: Q_TOF drops FALSE only Preset_TOF after Start
+// goes FALSE (goes TRUE immediately when Start is pressed/energized).
+// Reset forces IN false, same as releasing Start (delayed drop by PT).
+#Timer_TOF(IN := ("I_Start_TOF" OR "HMI_Start_TOF") AND NOT ("I_Reset_TOF" OR "HMI_Reset_TOF"),
+           PT := #Preset_TOF);
+"Q_TOF" := #Timer_TOF.Q;
+#HMI_ET_TOF_s := TIME_TO_DINT(#Timer_TOF.ET) / 1.0E+003;
+
+// TP — Pulse timer: on a rising edge of Start, Q_TP stays TRUE for
+// exactly Preset_TP, regardless of how long Start stays TRUE. Reset only
+// blocks a NEW pulse from starting while held; cannot cut a running one
+// short (TP ignores IN once triggered).
+#Timer_TP(IN := ("I_Start_TP" OR "HMI_Start_TP") AND NOT ("I_Reset_TP" OR "HMI_Reset_TP"),
+          PT := #Preset_TP);
+"Q_TP" := #Timer_TP.Q;
+#HMI_ET_TP_s := TIME_TO_DINT(#Timer_TP.ET) / 1.0E+003;
+
+// CTU — Count Up: increments on each rising edge of CU (physical OR HMI
+// memory tag); Q_CTU goes TRUE once CV >= Preset_CTU. R resets CV to 0
+// (CTU natively supports R).
+// NOTE 3: TIA's counter types (CTU_INT/CTD_INT/CTUD_INT) share one
+// underlying structure with QU/QD outputs, not a plain "Q" — confirmed
+// via autocomplete (CD, CU, CV, LD, PV, QD, QU, R; no "Q"). Use .QU for
+// CTU's up-output, .QD for CTD's down-output.
+#Counter_CTU(CU := "I_CU_CTU" OR "HMI_CU_CTU",
+             R  := "I_Reset_CTU" OR "HMI_Reset_CTU",
+             PV := #Preset_CTU);
+"Q_CTU" := #Counter_CTU.QU;
+#HMI_CV_CTU := #Counter_CTU.CV;
+
+// CTD — Count Down: decrements on each rising edge of CD, starting from
+// Preset_CTD; Q_CTD goes TRUE once CV <= 0. LD reloads CV with
+// Preset_CTD (CTD has no R; LD is its reset/reload mechanism).
+#Counter_CTD(CD := "I_CD_CTD" OR "HMI_CD_CTD",
+             LD := "I_Load_CTD" OR "HMI_Load_CTD",
+             PV := #Preset_CTD);
+"Q_CTD" := #Counter_CTD.QD;
+#HMI_CV_CTD := #Counter_CTD.CV;
+
+// CTUD — Count Up/Down: CU increments, CD decrements; QU TRUE once
+// CV >= Preset_CTUD, QD TRUE once CV <= 0. R forces CV to 0, LD
+// loads CV with Preset_CTUD (CTUD natively supports both R and LD).
+#Counter_CTUD(CU := "I_CU_CTUD" OR "HMI_CU_CTUD",
+              CD := "I_CD_CTUD" OR "HMI_CD_CTUD",
+              R  := "I_Reset_CTUD" OR "HMI_Reset_CTUD",
+              LD := "I_Load_CTUD" OR "HMI_Load_CTUD",
+              PV := #Preset_CTUD);
+"Q_CTUD_QU" := #Counter_CTUD.QU;
+"Q_CTUD_QD" := #Counter_CTUD.QD;
+#HMI_CV_CTUD := #Counter_CTUD.CV;
